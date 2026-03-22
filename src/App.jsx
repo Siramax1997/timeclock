@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 
 const API_URL = "https://script.google.com/macros/s/AKfycbyk5pFcfXtuZm0wUFqswrQxzvgOOkMb9jTViCbktmH7KzIUGr6zhE6pzKMUsS2vUK7x/exec";
 
@@ -11,189 +11,167 @@ const api = async (action, params = {}) => {
 };
 
 // ─── Utils ────────────────────────────────────────────────────────────────────
-const haversine = (lat1,lon1,lat2,lon2) => {
-  const R=6371000, dL=((lat2-lat1)*Math.PI)/180, dO=((lon2-lon1)*Math.PI)/180;
-  const a=Math.sin(dL/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dO/2)**2;
+const haversine = (la1,lo1,la2,lo2) => {
+  const R=6371000,dL=((la2-la1)*Math.PI)/180,dO=((lo2-lo1)*Math.PI)/180;
+  const a=Math.sin(dL/2)**2+Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(dO/2)**2;
   return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
 };
-const todayKey = () => new Date().toISOString().slice(0,10);
-const fmtTime = (iso) => { if(!iso) return "—"; try { return new Date(iso).toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"}); } catch{return iso;} };
-const fmtDate = (s) => { if(!s) return "—"; try { const d=String(s).length===10?new Date(s+"T00:00:00"):new Date(s); return isNaN(d)?"—":d.toLocaleDateString("th-TH",{day:"numeric",month:"short",year:"numeric"}); } catch{return s;} };
-const diffMins = (a,b) => { if(!a||!b) return null; return Math.round((new Date(b)-new Date(a))/60000); };
-const minsToHM = (m) => { if(m==null||m<0) return "—"; return `${Math.floor(m/60)}ชม.${m%60}น.`; };
+const today = () => new Date().toISOString().slice(0,10);
+const ft = (iso) => { if(!iso) return "—"; try{return new Date(iso).toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"})}catch{return iso} };
+const fd = (s) => { if(!s) return "—"; try{const d=String(s).length===10?new Date(s+"T00:00:00"):new Date(s);return isNaN(d)?"—":d.toLocaleDateString("th-TH",{day:"numeric",month:"short",year:"2-digit"})}catch{return s} };
+const dm = (a,b) => { if(!a||!b) return null; const d=Math.round((new Date(b)-new Date(a))/60000); return d<0?null:d; };
+const hm = (m) => { if(m==null||m<0) return "—"; return `${Math.floor(m/60)}:${String(m%60).padStart(2,"0")}`; };
+const addMins = (time,mins) => { const [h,m]=time.split(":").map(Number),t=h*60+m+mins; return `${String(Math.floor(t/60)).padStart(2,"0")}:${String(t%60).padStart(2,"0")}`; };
 
-// ─── Status logic ─────────────────────────────────────────────────────────────
-const getStatus = (rec, schedule) => {
-  if (!rec) return { label:"ขาดงาน", color:"#ff4d4d", bg:"#2d0a0a", icon:"✗" };
-  if (rec.leaveType) {
-    const t = { sick:"ลาป่วย", personal:"ลากิจ", vacation:"ลาพักร้อน" }[rec.leaveType] || "ลา";
-    return { label:t, color:"#a78bfa", bg:"#1a0d2e", icon:"📋" };
-  }
-  if (!rec.checkIn) return { label:"ขาดงาน", color:"#ff4d4d", bg:"#2d0a0a", icon:"✗" };
-
-  const workStart = schedule?.startTime || "08:30";
-  const workEnd = schedule?.endTime || "17:30";
-  const [sh,sm] = workStart.split(":").map(Number);
-  const [eh,em] = workEnd.split(":").map(Number);
-
-  const cin = new Date(rec.checkIn);
-  const cinMins = cin.getHours()*60+cin.getMinutes();
-  const startMins = sh*60+sm;
-  const endMins = eh*60+em;
-  const graceMins = schedule?.graceMins || 15;
-
-  if (!rec.checkOut) return { label:"กำลังทำงาน", color:"#34d399", bg:"#0a2018", icon:"▶" };
-
-  const cout = new Date(rec.checkOut);
-  const coutMins = cout.getHours()*60+cout.getMinutes();
-  const late = cinMins > startMins + graceMins;
-  const earlyLeave = coutMins < endMins - 10;
-
-  if (late && earlyLeave) return { label:"สาย+ออกก่อน", color:"#fb923c", bg:"#2d1505", icon:"⚠" };
-  if (late) return { label:"มาสาย", color:"#fbbf24", bg:"#2d1f05", icon:"⚡" };
-  if (earlyLeave) return { label:"ออกก่อนเวลา", color:"#f97316", bg:"#2d1205", icon:"↩" };
-  return { label:"ปกติ", color:"#34d399", bg:"#0a2018", icon:"✓" };
+const STATUS = (rec, sch) => {
+  const S = sch || {};
+  const start = S.startTime||"08:30", end = S.endTime||"17:30", grace = +(S.graceMins||15);
+  if (!rec) return {label:"ขาดงาน",color:"#f87171",dot:"#ef4444",bg:"#2d0a0a"};
+  if (rec.leaveType) return {label:{sick:"ลาป่วย",personal:"ลากิจ",vacation:"ลาพักร้อน"}[rec.leaveType]||"ลา",color:"#c4b5fd",dot:"#8b5cf6",bg:"#1e1040"};
+  if (!rec.checkIn) return {label:"ขาดงาน",color:"#f87171",dot:"#ef4444",bg:"#2d0a0a"};
+  if (!rec.checkOut) return {label:"กำลังทำงาน",color:"#34d399",dot:"#10b981",bg:"#052e16"};
+  const cin=new Date(rec.checkIn), cout=new Date(rec.checkOut);
+  const cinM=cin.getHours()*60+cin.getMinutes(), coutM=cout.getHours()*60+cout.getMinutes();
+  const [sh,sm]=start.split(":").map(Number), [eh,em]=end.split(":").map(Number);
+  const late=cinM>sh*60+sm+grace, early=coutM<eh*60+em-10;
+  if(late&&early) return {label:"สาย+ออกก่อน",color:"#fb923c",dot:"#f97316",bg:"#2c1000"};
+  if(late) return {label:"มาสาย "+(cinM-(sh*60+sm))+"น.",color:"#fbbf24",dot:"#f59e0b",bg:"#292100"};
+  if(early) return {label:"ออกก่อนเวลา",color:"#fb923c",dot:"#f97316",bg:"#2c1000"};
+  return {label:"ปกติ ✓",color:"#34d399",dot:"#10b981",bg:"#052e16"};
 };
 
-// ─── Icons ────────────────────────────────────────────────────────────────────
-const I = {
-  clock:    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width:16,height:16}}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
-  pin:      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width:16,height:16}}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>,
-  user:     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width:16,height:16}}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
-  dl:       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width:14,height:14}}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>,
-  logout:   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width:15,height:15}}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
-  ok:       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{width:14,height:14}}><polyline points="20 6 9 17 4 12"/></svg>,
-  err:      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{width:14,height:14}}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
-  hist:     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width:16,height:16}}><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>,
-  leave:    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width:16,height:16}}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
-  settings: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width:16,height:16}}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
-  refresh:  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width:14,height:14}}><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>,
-  chart:    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width:16,height:16}}><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
-};
-
-const css = `
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap');
+// ─── Global CSS ───────────────────────────────────────────────────────────────
+const G = `
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#070b14;--bg2:#0d1220;--bg3:#111827;--border:#1e2535;--accent:#00e5ff;--accent2:#7c3aed;--green:#10b981;--yellow:#f59e0b;--red:#ef4444;--orange:#f97316;--purple:#a78bfa;--text:#e2e8f0;--muted:#64748b}
-body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace}
-::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:#0a0a0f}::-webkit-scrollbar-thumb{background:var(--accent);border-radius:2px}
-input,select,textarea{background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:13px;width:100%;outline:none;transition:border-color 0.2s}
-input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(0,229,255,0.08)}
-button{cursor:pointer;font-family:'JetBrains Mono',monospace;border:none;border-radius:8px;transition:all 0.15s;font-size:13px}
-button:hover{filter:brightness(1.1)}
+:root{
+  --bg:#0c0e14;--s1:#13161f;--s2:#1a1e2a;--s3:#222736;
+  --br:#252a38;--br2:#2e3449;
+  --tx:#e8eaf0;--t2:#9aa0b8;--t3:#5a6180;
+  --blue:#4f8ef7;--cyan:#22d3ee;--green:#4ade80;
+  --yellow:#fbbf24;--red:#f87171;--purple:#a78bfa;--orange:#fb923c;
+}
+body{background:var(--bg);color:var(--tx);font-family:'IBM Plex Sans Thai',sans-serif;font-size:14px;line-height:1.5}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--br2);border-radius:2px}
+input,select,textarea{background:var(--s2);border:1.5px solid var(--br);color:var(--tx);padding:9px 13px;border-radius:8px;font-family:'IBM Plex Sans Thai',sans-serif;font-size:14px;width:100%;outline:none;transition:border 0.15s}
+input:focus,select:focus,textarea:focus{border-color:var(--blue)}
+button{cursor:pointer;font-family:'IBM Plex Sans Thai',sans-serif;border:none;border-radius:8px;transition:all 0.15s;font-size:14px;font-weight:500}
+button:hover{opacity:0.88}
 button:active{transform:scale(0.97)}
-.card{background:var(--bg2);border:1px solid var(--border);border-radius:14px}
-.slide{animation:slideUp 0.25s ease}
-@keyframes slideUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.card{background:var(--s1);border:1.5px solid var(--br);border-radius:12px}
+.fade{animation:fade 0.2s ease}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 .spin{animation:spin 0.9s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-.glow{box-shadow:0 0 20px rgba(0,229,255,0.15)}
 table{border-collapse:collapse;width:100%}
-th{padding:10px 14px;text-align:left;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);background:var(--bg3);border-bottom:1px solid var(--border);font-family:'Syne',sans-serif}
-td{padding:10px 14px;font-size:12px;border-bottom:1px solid var(--border)}
+th{padding:9px 14px;text-align:left;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--t2);background:var(--s2);border-bottom:1.5px solid var(--br);font-weight:600}
+td{padding:9px 14px;font-size:13px;border-bottom:1px solid var(--br);color:var(--tx)}
 tr:last-child td{border-bottom:none}
 tr:hover td{background:rgba(255,255,255,0.02)}
-.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:10px;letter-spacing:1px;font-weight:500}
-@keyframes shake{0%,100%{transform:translateX(0)}25%,75%{transform:translateX(-6px)}50%{transform:translateX(6px)}}
+.pill{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:500;letter-spacing:0.3px}
+@keyframes shake{0%,100%{transform:translateX(0)}30%,70%{transform:translateX(-5px)}50%{transform:translateX(5px)}}
 `;
 
-// ─── App ──────────────────────────────────────────────────────────────────────
+// ─── Main ─────────────────────────────────────────────────────────────────────
 export default function App() {
-  const [employees, setEmployees] = useState([]);
-  const [records, setRecords]     = useState({});
-  const [location, setLocation]   = useState(null);
-  const [schedule, setSchedule]   = useState(null);
-  const [user, setUser]           = useState(null);
-  const [view, setView]           = useState("login");
-  const [loading, setLoading]     = useState(true);
+  const [employees,setEmployees] = useState([]);
+  const [records,setRecords]     = useState({});
+  const [location,setLocation]   = useState(null);
+  const [schedule,setSchedule]   = useState(null);
+  const [user,setUser]           = useState(null);
+  const [view,setView]           = useState("login");
+  const [loading,setLoading]     = useState(true);
+  const [loadErr,setLoadErr]     = useState("");
 
   const loadAll = async () => {
-    setLoading(true);
-    const [e,r,c] = await Promise.all([api("getEmployees"),api("getRecords"),api("getConfig")]);
-    if(e.success) setEmployees(e.data||[]);
-    if(r.success) setRecords(r.data||{});
-    if(c.success){ setLocation(c.data?.location||null); setSchedule(c.data?.schedule||null); }
+    setLoading(true); setLoadErr("");
+    const [er,rr,cr] = await Promise.all([api("getEmployees"),api("getRecords"),api("getConfig")]);
+    if(!er.success||!rr.success||!cr.success){
+      setLoadErr("เชื่อมต่อ Google Sheet ไม่สำเร็จ — กรุณารีเฟรช");
+    }
+    setEmployees(er.data||[]);
+    setRecords(rr.data||{});
+    // config has separate keys: location, schedule
+    const cfg = cr.data||{};
+    setLocation(cfg.location||null);
+    setSchedule(cfg.schedule||null);
     setLoading(false);
   };
   useEffect(()=>{ loadAll(); },[]);
 
   const reloadRec = async () => { const r=await api("getRecords"); if(r.success) setRecords(r.data||{}); };
-  const login  = (u) => { setUser(u); setView(u.role==="admin"?"admin":"dashboard"); };
-  const logout = ()  => { setUser(null); setView("login"); };
+  const login  = u => { setUser(u); setView(u.role==="admin"?"admin":"dash"); };
+  const logout = () => { setUser(null); setView("login"); };
 
-  if(loading) return (
-    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#070b14",flexDirection:"column",gap:20}}>
-      <style>{css}</style>
-      <div style={{position:"relative",width:60,height:60}}>
-        <div style={{position:"absolute",inset:0,border:"2px solid transparent",borderTopColor:"#00e5ff",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
-        <div style={{position:"absolute",inset:8,border:"2px solid transparent",borderTopColor:"#7c3aed",borderRadius:"50%",animation:"spin 1.2s linear infinite reverse"}}/>
-      </div>
-      <div style={{fontFamily:"'Syne',sans-serif",fontSize:11,letterSpacing:4,color:"#00e5ff"}}>LOADING SYSTEM</div>
-    </div>
-  );
+  if(loading) return <Loader/>;
 
   return (
     <>
-      <style>{css}</style>
-      {view==="login"     && <LoginView employees={employees} onLogin={login}/>}
-      {view==="dashboard" && <DashboardView user={user} records={records} location={location} schedule={schedule} onReload={reloadRec} onLogout={logout}/>}
-      {view==="admin"     && <AdminView user={user} employees={employees} records={records} location={location} schedule={schedule} onReloadAll={loadAll} onLogout={logout}/>}
+      <style>{G}</style>
+      {view==="login" && <Login employees={employees} err={loadErr} onLogin={login} onRetry={loadAll}/>}
+      {view==="dash"  && <Dash  user={user} records={records} location={location} schedule={schedule} onReload={reloadRec} onLogout={logout}/>}
+      {view==="admin" && <Admin user={user} employees={employees} records={records} location={location} schedule={schedule} onReloadAll={loadAll} onLogout={logout}/>}
     </>
   );
 }
 
+function Loader() {
+  return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100vh",background:"#0c0e14",gap:16}}>
+      <style>{G}</style>
+      <div style={{width:36,height:36,border:"3px solid #252a38",borderTopColor:"#4f8ef7",borderRadius:"50%"}} className="spin"/>
+      <div style={{color:"#5a6180",fontSize:13,letterSpacing:2}}>กำลังโหลด...</div>
+    </div>
+  );
+}
+
 // ─── Login ────────────────────────────────────────────────────────────────────
-function LoginView({ employees, onLogin }) {
-  const [id,setId] = useState(""); const [pin,setPin] = useState("");
-  const [err,setErr] = useState(""); const [shake,setShake] = useState(false);
-  const [now,setNow] = useState(new Date());
+function Login({ employees, err, onLogin, onRetry }) {
+  const [id,setId]=useState(""); const [pin,setPin]=useState("");
+  const [error,setError]=useState(""); const [shake,setShake]=useState(false);
+  const [now,setNow]=useState(new Date());
   useEffect(()=>{ const t=setInterval(()=>setNow(new Date()),1000); return()=>clearInterval(t); },[]);
 
-  const login = () => {
-    const u = employees.find(e=>e.id===id.trim().toUpperCase()&&String(e.pin)===String(pin));
+  const go = () => {
+    const u=employees.find(e=>e.id===id.trim().toUpperCase()&&String(e.pin)===String(pin));
     if(u){ onLogin(u); }
-    else{ setErr("รหัสไม่ถูกต้อง"); setShake(true); setTimeout(()=>setShake(false),500); }
+    else{ setError("รหัสพนักงานหรือ PIN ไม่ถูกต้อง"); setShake(true); setTimeout(()=>setShake(false),500); }
   };
 
   return (
-    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:20,background:"var(--bg)",position:"relative",overflow:"hidden"}}>
-      {/* BG grid */}
-      <div style={{position:"absolute",inset:0,backgroundImage:"linear-gradient(rgba(0,229,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,255,0.03) 1px,transparent 1px)",backgroundSize:"40px 40px"}}/>
-      <div style={{position:"absolute",top:"20%",left:"10%",width:300,height:300,background:"radial-gradient(circle,rgba(124,58,237,0.12) 0%,transparent 70%)",pointerEvents:"none"}}/>
-      <div style={{position:"absolute",bottom:"20%",right:"10%",width:400,height:400,background:"radial-gradient(circle,rgba(0,229,255,0.08) 0%,transparent 70%)",pointerEvents:"none"}}/>
-
-      <div className="slide" style={{position:"relative",width:"100%",maxWidth:420,animation:shake?"shake 0.4s ease":""}}>
-        {/* Clock */}
+    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:20,background:"var(--bg)"}}>
+      <div style={{width:"100%",maxWidth:380}}>
+        {/* Logo + time */}
         <div style={{textAlign:"center",marginBottom:32}}>
-          <div style={{fontFamily:"'Syne',sans-serif",fontSize:52,fontWeight:800,letterSpacing:2,color:"var(--accent)",lineHeight:1,textShadow:"0 0 30px rgba(0,229,255,0.4)"}}>
+          <div style={{width:56,height:56,background:"var(--s2)",border:"2px solid var(--br2)",borderRadius:14,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px",fontSize:24}}>⏱</div>
+          <div style={{fontSize:28,fontWeight:700,letterSpacing:1,color:"var(--tx)"}}>TimeClock</div>
+          <div style={{color:"var(--t3)",fontSize:12,marginTop:4,letterSpacing:2}}>ATTENDANCE SYSTEM</div>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:36,fontWeight:500,color:"var(--blue)",marginTop:16,letterSpacing:3}}>
             {now.toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}
           </div>
-          <div style={{fontSize:11,color:"var(--muted)",marginTop:6,letterSpacing:3}}>
+          <div style={{color:"var(--t2)",fontSize:13,marginTop:4}}>
             {now.toLocaleDateString("th-TH",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}
           </div>
         </div>
 
-        <div className="card" style={{padding:"32px 36px"}}>
-          <div style={{textAlign:"center",marginBottom:28}}>
-            <div style={{width:48,height:48,background:"linear-gradient(135deg,#00e5ff22,#7c3aed22)",border:"1px solid rgba(0,229,255,0.3)",borderRadius:12,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px",fontSize:22}}>⏱</div>
-            <h1 style={{fontFamily:"'Syne',sans-serif",fontSize:22,fontWeight:800,letterSpacing:3,color:"var(--text)"}}>TIMECLOCK</h1>
-            <div style={{fontSize:10,color:"var(--muted)",letterSpacing:3,marginTop:3}}>ATTENDANCE SYSTEM v2</div>
-          </div>
-
+        <div className="card" style={{padding:28,animation:shake?"shake 0.4s":""}}>
+          {err && (
+            <div style={{background:"rgba(248,113,113,0.1)",border:"1px solid rgba(248,113,113,0.3)",borderRadius:8,padding:"10px 14px",marginBottom:16,fontSize:12,color:"var(--red)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span>⚠ {err}</span>
+              <button onClick={onRetry} style={{background:"none",color:"var(--blue)",fontSize:12,padding:"2px 8px",border:"1px solid var(--blue)",borderRadius:6}}>รีเฟรช</button>
+            </div>
+          )}
           <div style={{marginBottom:14}}>
-            <label style={{fontSize:10,color:"var(--muted)",letterSpacing:2,display:"block",marginBottom:7}}>รหัสพนักงาน</label>
-            <input placeholder="MAX" value={id} onChange={e=>setId(e.target.value)} onKeyDown={e=>e.key==="Enter"&&login()} style={{textTransform:"uppercase"}}/>
+            <label style={{fontSize:12,color:"var(--t2)",display:"block",marginBottom:7,fontWeight:500}}>รหัสพนักงาน</label>
+            <input placeholder="MAX" value={id} onChange={e=>setId(e.target.value)} onKeyDown={e=>e.key==="Enter"&&go()} style={{textTransform:"uppercase"}}/>
           </div>
           <div style={{marginBottom:20}}>
-            <label style={{fontSize:10,color:"var(--muted)",letterSpacing:2,display:"block",marginBottom:7}}>รหัส PIN</label>
-            <input type="password" placeholder="••••" value={pin} onChange={e=>setPin(e.target.value)} onKeyDown={e=>e.key==="Enter"&&login()}/>
+            <label style={{fontSize:12,color:"var(--t2)",display:"block",marginBottom:7,fontWeight:500}}>รหัส PIN</label>
+            <input type="password" placeholder="••••" value={pin} onChange={e=>setPin(e.target.value)} onKeyDown={e=>e.key==="Enter"&&go()}/>
           </div>
-
-          {err && <div style={{background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.3)",borderRadius:8,padding:"10px 14px",marginBottom:16,fontSize:12,color:"var(--red)",display:"flex",gap:8,alignItems:"center"}}>{I.err} {err}</div>}
-
-          <button onClick={login} style={{width:"100%",padding:13,background:"linear-gradient(135deg,#00e5ff,#7c3aed)",color:"#fff",fontWeight:600,fontSize:13,letterSpacing:2,borderRadius:8,fontFamily:"'Syne',sans-serif"}}>
-            เข้าสู่ระบบ →
-          </button>
+          {error && <div style={{background:"rgba(248,113,113,0.1)",border:"1px solid rgba(248,113,113,0.25)",borderRadius:8,padding:"10px 14px",marginBottom:16,fontSize:13,color:"var(--red)"}}>✗ {error}</div>}
+          <button onClick={go} style={{width:"100%",padding:12,background:"var(--blue)",color:"#fff",fontWeight:600,fontSize:15,borderRadius:8}}>เข้าสู่ระบบ</button>
+          {employees.length===0&&<div style={{marginTop:12,fontSize:11,color:"var(--t3)",textAlign:"center"}}>⚠ ไม่พบข้อมูลพนักงาน — เช็ค Google Sheet แท็บ employees</div>}
         </div>
       </div>
     </div>
@@ -201,280 +179,250 @@ function LoginView({ employees, onLogin }) {
 }
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
-function DashboardView({ user, records, location, schedule, onReload, onLogout }) {
+function Dash({ user, records, location, schedule, onReload, onLogout }) {
   const [tab,setTab]   = useState("checkin");
-  const [gps,setGps]   = useState("idle"); // idle|checking|ok|err|far
-  const [gpsData,setGpsData] = useState(null);
-  const [gpsMsg,setGpsMsg]   = useState("");
+  const [gps,setGps]   = useState("idle");
+  const [gd,setGd]     = useState(null);
+  const [gMsg,setGMsg] = useState("");
   const [msg,setMsg]   = useState(null);
   const [busy,setBusy] = useState(false);
-  const [showLeave,setShowLeave] = useState(false);
+  const [lf,setLf]     = useState({type:"sick",start:today(),end:today(),reason:""});
   const [now,setNow]   = useState(new Date());
-  const [leaveForm,setLeaveForm] = useState({type:"sick",startDate:todayKey(),endDate:todayKey(),reason:""});
-
   useEffect(()=>{ const t=setInterval(()=>setNow(new Date()),1000); return()=>clearInterval(t); },[]);
 
-  const todayRec = records[todayKey()]?.[user.id];
-  const workStart = schedule?.startTime||"08:30";
-  const workEnd   = schedule?.endTime||"17:30";
+  const todRec = records[today()]?.[user.id];
+  const st = STATUS(todRec, schedule);
+  const myRecs = Object.entries(records).flatMap(([d,r])=>r[user.id]?[{date:d,...r[user.id]}]:[]).sort((a,b)=>b.date.localeCompare(a.date));
 
-  const allRecs = Object.entries(records)
-    .flatMap(([date,d])=>d[user.id]?[{date,...d[user.id]}]:[])
-    .sort((a,b)=>b.date.localeCompare(a.date));
+  const mo = today().slice(0,7);
+  const moRecs = myRecs.filter(r=>r.date.startsWith(mo));
+  const leaveUsed = myRecs.filter(r=>r.leaveType&&r.date.startsWith(today().slice(0,4))).length;
+  const leaveMax  = schedule?.maxLeaveDays||10;
+  const leaveLeft = Math.max(0,leaveMax-leaveUsed);
 
-  // leave balance
-  const thisYear = new Date().getFullYear();
-  const leaveUsed = allRecs.filter(r => r.leaveType && r.date.startsWith(String(thisYear))).length;
-  const leaveMax = schedule?.maxLeaveDays || 10;
-  const leaveLeft = Math.max(0, leaveMax - leaveUsed);
-
-  const status = getStatus(todayRec, schedule);
+  const showMsg = (ok,txt) => { setMsg({ok,txt}); setTimeout(()=>setMsg(null),4000); };
 
   const checkGPS = () => {
-    setGps("checking"); setGpsMsg("");
-    if(!navigator.geolocation){ setGps("err"); setGpsMsg("เบราว์เซอร์ไม่รองรับ GPS"); return; }
+    setGps("checking"); setGMsg("");
+    if(!navigator.geolocation){ setGps("err"); setGMsg("เบราว์เซอร์ไม่รองรับ GPS"); return; }
     navigator.geolocation.getCurrentPosition(pos=>{
-      const {latitude:lat,longitude:lng,accuracy} = pos.coords;
-      if(!location?.lat){ setGps("ok"); setGpsData({lat,lng,accuracy,dist:0}); setGpsMsg("✓ รับพิกัดสำเร็จ"); return; }
-      const dist = haversine(lat,lng,location.lat,location.lng);
-      setGpsData({lat,lng,accuracy,dist});
-      if(dist<=location.radius){ setGps("ok"); setGpsMsg(`✓ อยู่ในพื้นที่ (ห่าง ${Math.round(dist)} ม.)`); }
-      else{ setGps("far"); setGpsMsg(`✗ นอกพื้นที่ (ห่าง ${Math.round(dist)} ม.)`); }
-    },()=>{ setGps("err"); setGpsMsg("ไม่สามารถรับพิกัดได้"); },{enableHighAccuracy:true,timeout:12000});
+      const {latitude:lat,longitude:lng,accuracy:acc}=pos.coords;
+      // if no location config → allow anyway
+      if(!location||!location.lat||!location.lng){
+        setGps("ok"); setGd({lat,lng,acc,dist:0}); setGMsg("✓ รับพิกัดสำเร็จ"); return;
+      }
+      const dist=haversine(lat,lng,+location.lat,+location.lng);
+      setGd({lat,lng,acc,dist});
+      if(dist<=(+location.radius||200)){ setGps("ok"); setGMsg(`✓ อยู่ในพื้นที่ (ห่าง ${Math.round(dist)} ม.)`); }
+      else { setGps("far"); setGMsg(`✗ นอกพื้นที่ (ห่าง ${Math.round(dist)} ม. | ขอบเขต ${location.radius||200} ม.)`); }
+    },()=>{ setGps("err"); setGMsg("ไม่สามารถรับพิกัดได้ — กรุณาอนุญาต GPS"); },{enableHighAccuracy:true,timeout:14000});
   };
 
-  const showMsg2 = (type,text) => { setMsg({type,text}); setTimeout(()=>setMsg(null),4000); };
-
-  const doCheckIn = async () => {
+  const doIn = async () => {
     if(gps!=="ok"||busy) return; setBusy(true);
-    const res = await api("checkIn",{date:todayKey(),empId:user.id,time:new Date().toISOString(),lat:gpsData.lat,lng:gpsData.lng});
-    if(res.success){ await onReload(); showMsg2("ok","เช็คอินสำเร็จ! "+fmtTime(new Date().toISOString())); }
-    else showMsg2("err",res.message||"เกิดข้อผิดพลาด");
+    const r=await api("checkIn",{date:today(),empId:user.id,time:new Date().toISOString(),lat:gd.lat,lng:gd.lng});
+    if(r.success){ await onReload(); showMsg(true,"เช็คอินสำเร็จ "+ft(new Date().toISOString())); }
+    else showMsg(false,r.message||"เกิดข้อผิดพลาด");
     setBusy(false);
   };
-
-  const doCheckOut = async () => {
+  const doOut = async () => {
     if(gps!=="ok"||busy) return; setBusy(true);
-    const res = await api("checkOut",{date:todayKey(),empId:user.id,time:new Date().toISOString(),lat:gpsData.lat,lng:gpsData.lng});
-    if(res.success){ await onReload(); showMsg2("ok","เช็คเอาท์สำเร็จ! "+fmtTime(new Date().toISOString())); }
-    else showMsg2("err",res.message||"เกิดข้อผิดพลาด");
+    const r=await api("checkOut",{date:today(),empId:user.id,time:new Date().toISOString(),lat:gd.lat,lng:gd.lng});
+    if(r.success){ await onReload(); showMsg(true,"เช็คเอาท์สำเร็จ "+ft(new Date().toISOString())); }
+    else showMsg(false,r.message||"เกิดข้อผิดพลาด");
     setBusy(false);
   };
-
-  const submitLeave = async () => {
-    if(!leaveForm.reason.trim()){ showMsg2("err","กรุณาระบุเหตุผล"); return; }
-    if(leaveLeft<=0){ showMsg2("err","วันลาไม่เพียงพอ"); return; }
+  const doLeave = async () => {
+    if(!lf.reason.trim()){ showMsg(false,"กรุณาระบุเหตุผล"); return; }
     setBusy(true);
-    const res = await api("submitLeave",{empId:user.id,startDate:leaveForm.startDate,endDate:leaveForm.endDate,leaveType:leaveForm.type,reason:leaveForm.reason});
-    if(res.success){ await onReload(); setShowLeave(false); showMsg2("ok","ส่งคำขอลาเรียบร้อย"); }
-    else showMsg2("err",res.message||"เกิดข้อผิดพลาด");
+    const r=await api("submitLeave",{empId:user.id,startDate:lf.start,endDate:lf.end,leaveType:lf.type,reason:lf.reason});
+    if(r.success){ await onReload(); showMsg(true,`ส่งคำขอลาสำเร็จ (${r.days} วัน)`); }
+    else showMsg(false,r.message||"ผิดพลาด");
     setBusy(false);
   };
-
   const exportCSV = () => {
-    const rows=[["วันที่","เช็คอิน","เช็คเอาท์","รวมชั่วโมง","สถานะ"]];
-    allRecs.forEach(r=>{ const s=getStatus(r,schedule); rows.push([r.date,fmtTime(r.checkIn),fmtTime(r.checkOut),minsToHM(diffMins(r.checkIn,r.checkOut)),s.label]); });
-    const a=document.createElement("a");
-    a.href=URL.createObjectURL(new Blob(["\uFEFF"+rows.map(r=>r.join(",")).join("\n")],{type:"text/csv;charset=utf-8;"}));
-    a.download=`attendance_${user.id}_${todayKey()}.csv`; a.click();
+    const rows=[["วันที่","เข้างาน","ออกงาน","รวม","สถานะ"]];
+    myRecs.forEach(r=>{ const s=STATUS(r,schedule); rows.push([r.date,ft(r.checkIn),ft(r.checkOut),hm(dm(r.checkIn,r.checkOut)),s.label]); });
+    const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob(["\uFEFF"+rows.map(r=>r.join(",")).join("\n")],{type:"text/csv;charset=utf-8;"}));
+    a.download=`attendance_${user.id}_${today()}.csv`; a.click();
   };
 
-  const gpsColor = {idle:"var(--muted)",checking:"var(--yellow)",ok:"var(--green)",err:"var(--red)",far:"var(--red)"}[gps];
-  const canIn  = gps==="ok"&&!todayRec?.checkIn&&!todayRec?.leaveType&&!busy;
-  const canOut = gps==="ok"&&!!todayRec?.checkIn&&!todayRec?.checkOut&&!busy;
-
-  // Stats for this month
-  const thisMonth = new Date().toISOString().slice(0,7);
-  const monthRecs = allRecs.filter(r=>r.date.startsWith(thisMonth));
-  const presentDays = monthRecs.filter(r=>r.checkIn&&!r.leaveType).length;
-  const lateDays    = monthRecs.filter(r=>getStatus(r,schedule).label==="มาสาย").length;
-  const leaveDays   = monthRecs.filter(r=>r.leaveType).length;
-  const totalMins   = monthRecs.reduce((s,r)=>s+(diffMins(r.checkIn,r.checkOut)||0),0);
-
-  const tabs = [["checkin",I.clock,"เช็คอิน"],["history",I.hist,"ประวัติ"],["leave",I.leave,"ใบลา"]];
+  const gCol = {idle:"var(--t3)",checking:"var(--yellow)",ok:"var(--green)",err:"var(--red)",far:"var(--red)"}[gps];
+  const canIn  = gps==="ok"&&!todRec?.checkIn&&!todRec?.leaveType&&!busy;
+  const canOut = gps==="ok"&&!!todRec?.checkIn&&!todRec?.checkOut&&!busy;
 
   return (
-    <div style={{maxWidth:600,margin:"0 auto",padding:"16px 14px",minHeight:"100vh"}}>
-      {/* Header */}
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
+    <div style={{maxWidth:520,margin:"0 auto",padding:"16px 14px 40px",minHeight:"100vh"}}>
+      {/* Topbar */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
         <div>
-          <div style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:800,letterSpacing:2,color:"var(--text)"}}>TIMECLOCK</div>
-          <div style={{fontSize:11,color:"var(--muted)"}}>👋 {user.name} · {user.id}</div>
+          <div style={{fontSize:16,fontWeight:700,color:"var(--tx)"}}>⏱ TimeClock</div>
+          <div style={{fontSize:12,color:"var(--t3)"}}>สวัสดี, {user.name}</div>
         </div>
-        <button onClick={onLogout} style={{background:"var(--bg2)",color:"var(--muted)",border:"1px solid var(--border)",padding:"7px 12px",display:"flex",alignItems:"center",gap:6}}>
-          {I.logout} ออก
-        </button>
+        <button onClick={onLogout} style={{background:"var(--s2)",color:"var(--t2)",border:"1.5px solid var(--br)",padding:"7px 14px",fontSize:13}}>ออกจากระบบ</button>
       </div>
 
-      {/* Clock Card */}
-      <div className="card glow" style={{padding:24,textAlign:"center",marginBottom:14,background:"linear-gradient(135deg,#0d1220,#111827)",position:"relative",overflow:"hidden"}}>
-        <div style={{position:"absolute",top:0,left:0,right:0,height:2,background:"linear-gradient(90deg,var(--accent),var(--accent2))"}}/>
-        <div style={{fontFamily:"'Syne',sans-serif",fontSize:52,fontWeight:800,letterSpacing:3,color:"var(--accent)",lineHeight:1,textShadow:"0 0 40px rgba(0,229,255,0.3)"}}>
+      {/* Clock card */}
+      <div className="card" style={{padding:"20px 20px 16px",marginBottom:12,background:"var(--s1)",borderColor:"var(--br2)"}}>
+        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:46,fontWeight:500,color:"var(--blue)",letterSpacing:4,lineHeight:1,textAlign:"center"}}>
           {now.toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}
         </div>
-        <div style={{fontSize:11,color:"var(--muted)",marginTop:6}}>
+        <div style={{textAlign:"center",color:"var(--t2)",fontSize:13,marginTop:6}}>
           {now.toLocaleDateString("th-TH",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}
         </div>
-        {/* Today status strip */}
-        <div style={{display:"flex",justifyContent:"center",gap:8,marginTop:16,flexWrap:"wrap"}}>
-          <span className="badge" style={{background:status.bg,color:status.color,border:`1px solid ${status.color}40`}}>
-            {status.icon} {status.label}
-          </span>
-          {todayRec?.checkIn && <span className="badge" style={{background:"rgba(52,211,153,0.1)",color:"var(--green)",border:"1px solid rgba(52,211,153,0.3)"}}>
-            เข้า {fmtTime(todayRec.checkIn)}
-          </span>}
-          {todayRec?.checkOut && <span className="badge" style={{background:"rgba(239,68,68,0.1)",color:"var(--red)",border:"1px solid rgba(239,68,68,0.3)"}}>
-            ออก {fmtTime(todayRec.checkOut)}
-          </span>}
+        {/* status row */}
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,justifyContent:"center",marginTop:12}}>
+          <span className="pill" style={{background:st.bg,color:st.color,border:`1px solid ${st.color}50`}}>{st.label}</span>
+          {todRec?.checkIn&&<span className="pill" style={{background:"rgba(74,222,128,0.1)",color:"var(--green)",border:"1px solid rgba(74,222,128,0.3)"}}>เข้า {ft(todRec.checkIn)}</span>}
+          {todRec?.checkOut&&<span className="pill" style={{background:"rgba(248,113,113,0.1)",color:"var(--red)",border:"1px solid rgba(248,113,113,0.3)"}}>ออก {ft(todRec.checkOut)}</span>}
         </div>
-        {/* Work hours bar */}
-        {workStart && <div style={{marginTop:14,fontSize:10,color:"var(--muted)"}}>
-          🕐 เวลางาน {workStart} — {workEnd} น.
-          {location?.name && <span> · 📍 {location.name}</span>}
-        </div>}
+        {/* schedule info */}
+        {schedule&&(
+          <div style={{marginTop:12,background:"var(--s2)",borderRadius:8,padding:"10px 14px",display:"flex",flexWrap:"wrap",gap:12,justifyContent:"center"}}>
+            <span style={{fontSize:12,color:"var(--t2)"}}>🕐 {schedule.startTime}–{schedule.endTime}</span>
+            <span style={{fontSize:12,color:"var(--t2)"}}>⚡ ผ่อนผัน {schedule.graceMins||15} น.</span>
+            {location?.name&&<span style={{fontSize:12,color:"var(--t2)"}}>📍 {location.name}</span>}
+          </div>
+        )}
       </div>
 
       {/* Stats row */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>
-        {[["เข้างาน",presentDays,"var(--green)"],["มาสาย",lateDays,"var(--yellow)"],["ใช้ลาไปแล้ว",leaveDays,"var(--purple)"],["วันลาคงเหลือ",leaveLeft,"var(--accent)"]].map(([l,v,c])=>(
-          <div key={l} className="card" style={{padding:"12px 10px",textAlign:"center"}}>
-            <div style={{fontFamily:"'Syne',sans-serif",fontSize:26,fontWeight:800,color:c,lineHeight:1}}>{v}</div>
-            <div style={{fontSize:9,color:"var(--muted)",marginTop:4,letterSpacing:1}}>{l}</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:12}}>
+        {[
+          ["เข้างาน",moRecs.filter(r=>r.checkIn&&!r.leaveType).length,"var(--green)"],
+          ["มาสาย",moRecs.filter(r=>STATUS(r,schedule).label.startsWith("มาสาย")).length,"var(--yellow)"],
+          ["ใช้ลาแล้ว",leaveUsed,"var(--purple)"],
+          ["ลาคงเหลือ",leaveLeft,"var(--cyan)"],
+        ].map(([l,v,c])=>(
+          <div key={l} className="card" style={{padding:"12px 8px",textAlign:"center"}}>
+            <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:24,fontWeight:600,color:c,lineHeight:1}}>{v}</div>
+            <div style={{fontSize:10,color:"var(--t3)",marginTop:5,lineHeight:1.3}}>{l}</div>
           </div>
         ))}
       </div>
 
       {/* Tabs */}
       <div style={{display:"flex",gap:6,marginBottom:14}}>
-        {tabs.map(([k,ic,lb])=>(
-          <button key={k} onClick={()=>setTab(k)} style={{flex:1,padding:"9px 8px",display:"flex",alignItems:"center",justifyContent:"center",gap:6,background:tab===k?"var(--accent)":"var(--bg2)",color:tab===k?"#000":"var(--muted)",border:`1px solid ${tab===k?"var(--accent)":"var(--border)"}`,fontFamily:"'JetBrains Mono',monospace",borderRadius:10}}>
-            {ic} {lb}
+        {[["checkin","เช็คอิน/เอาท์"],["history","ประวัติ"],["leave","ใบลา"]].map(([k,lb])=>(
+          <button key={k} onClick={()=>setTab(k)} style={{flex:1,padding:"9px",background:tab===k?"var(--blue)":"var(--s1)",color:tab===k?"#fff":"var(--t2)",border:`1.5px solid ${tab===k?"var(--blue)":"var(--br)"}`,borderRadius:9,fontSize:13}}>
+            {lb}
           </button>
         ))}
       </div>
 
-      {/* Tab: Check-in */}
-      {tab==="checkin" && (
-        <div className="slide">
-          {/* GPS */}
-          <div className="card" style={{padding:18,marginBottom:12}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-              <div style={{display:"flex",alignItems:"center",gap:7,fontSize:12,color:"var(--muted)"}}>{I.pin} ตรวจสอบพิกัด</div>
-              <span style={{fontSize:10,color:gpsColor}}>{{idle:"รอตรวจสอบ",checking:"กำลังรับสัญญาณ...",ok:"✓ ในพื้นที่",err:"✗ ข้อผิดพลาด",far:"✗ นอกพื้นที่"}[gps]}</span>
+      {/* ── TAB: checkin ── */}
+      {tab==="checkin"&&(
+        <div className="fade">
+          {/* GPS box */}
+          <div className="card" style={{padding:16,marginBottom:10}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:gMsg?10:0}}>
+              <span style={{fontSize:13,color:"var(--t2)"}}>📡 ตรวจสอบพิกัด {location?.name?`· ${location.name}`:""}</span>
+              <span style={{fontSize:12,color:gCol,fontWeight:500}}>
+                {{idle:"รอ",checking:"รับสัญญาณ...",ok:"✓ ในพื้นที่",err:"✗ ผิดพลาด",far:"✗ นอกพื้นที่"}[gps]}
+              </span>
             </div>
-            {gpsMsg && <div style={{fontSize:11,color:gpsColor,background:`${gpsColor}18`,border:`1px solid ${gpsColor}30`,borderRadius:8,padding:"8px 12px",marginBottom:10}}>{gpsMsg}</div>}
-            <button onClick={checkGPS} disabled={gps==="checking"} style={{width:"100%",padding:11,background:"var(--bg3)",color:gps==="checking"?"var(--accent)":"var(--text)",border:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-              <span className={gps==="checking"?"spin":""}>{I.pin}</span>
-              {gps==="checking"?"กำลังรับสัญญาณ...":"ตรวจสอบพิกัด"}
+            {gMsg&&<div style={{fontSize:12,color:gCol,background:`${gCol}18`,border:`1px solid ${gCol}30`,borderRadius:7,padding:"8px 12px",marginBottom:10}}>{gMsg}</div>}
+            <button onClick={checkGPS} disabled={gps==="checking"} style={{width:"100%",padding:10,background:"var(--s2)",color:gps==="checking"?"var(--yellow)":"var(--tx)",border:"1.5px solid var(--br)",display:"flex",alignItems:"center",justifyContent:"center",gap:8,fontSize:13}}>
+              <span className={gps==="checking"?"spin":""}>📍</span>
+              {gps==="checking"?"กำลังรับสัญญาณ GPS...":"ตรวจสอบพิกัดของฉัน"}
             </button>
           </div>
 
-          {msg && <div style={{background:msg.type==="ok"?"rgba(16,185,129,0.1)":"rgba(239,68,68,0.1)",border:`1px solid ${msg.type==="ok"?"rgba(16,185,129,0.3)":"rgba(239,68,68,0.3)"}`,borderRadius:10,padding:"11px 14px",marginBottom:12,fontSize:12,color:msg.type==="ok"?"var(--green)":"var(--red)",display:"flex",gap:8,alignItems:"center"}}>
-            {msg.type==="ok"?I.ok:I.err} {msg.text}
+          {/* Alert */}
+          {msg&&<div style={{background:msg.ok?"rgba(74,222,128,0.1)":"rgba(248,113,113,0.1)",border:`1px solid ${msg.ok?"rgba(74,222,128,0.3)":"rgba(248,113,113,0.3)"}`,borderRadius:9,padding:"11px 14px",marginBottom:10,fontSize:13,color:msg.ok?"var(--green)":"var(--red)"}}>
+            {msg.ok?"✓":"✗"} {msg.txt}
           </div>}
 
-          {/* Check in/out buttons */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
-            <button onClick={doCheckIn} disabled={!canIn} style={{padding:"24px 12px",borderRadius:14,textAlign:"center",background:canIn?"linear-gradient(135deg,#10b981,#059669)":"var(--bg2)",color:canIn?"#fff":"var(--muted)",border:`1px solid ${canIn?"#10b981":"var(--border)"}`,opacity:todayRec?.checkIn?0.5:1,boxShadow:canIn?"0 0 20px rgba(16,185,129,0.2)":"none"}}>
-              <div style={{fontSize:32,marginBottom:8}}>→</div>
-              <div style={{fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:1}}>เช็คอิน</div>
-              {todayRec?.checkIn && <div style={{fontSize:10,marginTop:4,opacity:0.7}}>{fmtTime(todayRec.checkIn)}</div>}
-            </button>
-            <button onClick={doCheckOut} disabled={!canOut} style={{padding:"24px 12px",borderRadius:14,textAlign:"center",background:canOut?"linear-gradient(135deg,#ef4444,#dc2626)":"var(--bg2)",color:canOut?"#fff":"var(--muted)",border:`1px solid ${canOut?"#ef4444":"var(--border)"}`,opacity:!todayRec?.checkIn||todayRec?.checkOut?0.5:1,boxShadow:canOut?"0 0 20px rgba(239,68,68,0.2)":"none"}}>
-              <div style={{fontSize:32,marginBottom:8}}>←</div>
-              <div style={{fontFamily:"'Syne',sans-serif",fontWeight:700,letterSpacing:1}}>เช็คเอาท์</div>
-              {todayRec?.checkOut && <div style={{fontSize:10,marginTop:4,opacity:0.7}}>{fmtTime(todayRec.checkOut)}</div>}
-            </button>
+          {/* Check in/out */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+            {[
+              {label:"เช็คอิน",icon:"→",can:canIn,done:!!todRec?.checkIn,time:todRec?.checkIn,col:"#4ade80",bg:"rgba(74,222,128,0.12)",border:"rgba(74,222,128,0.3)",fn:doIn},
+              {label:"เช็คเอาท์",icon:"←",can:canOut,done:!!todRec?.checkOut,time:todRec?.checkOut,col:"#f87171",bg:"rgba(248,113,113,0.12)",border:"rgba(248,113,113,0.3)",fn:doOut},
+            ].map(b=>(
+              <button key={b.label} onClick={b.fn} disabled={!b.can} style={{padding:"22px 12px",borderRadius:11,textAlign:"center",background:b.can?b.bg:"var(--s1)",color:b.can?b.col:"var(--t3)",border:`1.5px solid ${b.can?b.border:"var(--br)"}`,opacity:b.done&&!b.can?0.55:1}}>
+                <div style={{fontSize:28,marginBottom:6}}>{b.icon}</div>
+                <div style={{fontWeight:600,fontSize:15}}>{b.label}</div>
+                {b.done&&<div style={{fontSize:11,marginTop:5,opacity:0.7}}>{ft(b.time)}</div>}
+                {busy&&<div style={{fontSize:11,marginTop:4,color:"var(--t3)"}}>กำลังบันทึก...</div>}
+              </button>
+            ))}
           </div>
 
-          {/* Leave shortcut */}
-          <button onClick={()=>setShowLeave(true)} style={{width:"100%",padding:11,background:"rgba(167,139,250,0.1)",color:"var(--purple)",border:"1px solid rgba(167,139,250,0.3)",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-            {I.leave} ส่งคำขอลา ({leaveLeft} วันคงเหลือ)
+          <button onClick={()=>setTab("leave")} style={{width:"100%",padding:10,background:"rgba(167,139,250,0.1)",color:"var(--purple)",border:"1.5px solid rgba(167,139,250,0.3)",fontSize:13}}>
+            📋 ส่งคำขอลา ({leaveLeft} วันคงเหลือ)
           </button>
-
-          {gps==="idle" && <div style={{textAlign:"center",fontSize:11,color:"var(--muted)",marginTop:12}}>กดตรวจสอบพิกัดก่อนเช็คอิน/เอาท์</div>}
+          {gps==="idle"&&<div style={{textAlign:"center",fontSize:12,color:"var(--t3)",marginTop:12}}>กดตรวจสอบพิกัดก่อน จึงเช็คอิน/เอาท์ได้</div>}
         </div>
       )}
 
-      {/* Tab: History */}
-      {tab==="history" && (
-        <div className="slide">
+      {/* ── TAB: history ── */}
+      {tab==="history"&&(
+        <div className="fade">
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-            <div style={{fontSize:11,color:"var(--muted)"}}>{allRecs.length} รายการ · {minsToHM(totalMins)} / เดือนนี้</div>
-            <button onClick={exportCSV} style={{background:"var(--accent)",color:"#000",padding:"7px 14px",display:"flex",alignItems:"center",gap:6,fontWeight:600,borderRadius:8}}>
-              {I.dl} CSV
-            </button>
+            <div style={{fontSize:13,color:"var(--t2)"}}>{myRecs.length} รายการ</div>
+            <button onClick={exportCSV} style={{background:"var(--blue)",color:"#fff",padding:"7px 14px",fontSize:13,display:"flex",alignItems:"center",gap:6}}>⬇ ดาวน์โหลด CSV</button>
           </div>
-          {allRecs.length===0 ? <div style={{textAlign:"center",color:"var(--muted)",padding:60}}>ยังไม่มีประวัติ</div>
-          : <div className="card" style={{overflow:"hidden"}}>
-              <table>
-                <thead><tr><th>วันที่</th><th>เข้า</th><th>ออก</th><th>รวม</th><th>สถานะ</th></tr></thead>
-                <tbody>
-                  {allRecs.map(r=>{ const s=getStatus(r,schedule); return (
-                    <tr key={r.date}>
-                      <td style={{color:"var(--text)",fontSize:11}}>{fmtDate(r.date)}</td>
-                      <td style={{color:"var(--green)"}}>{fmtTime(r.checkIn)}</td>
-                      <td style={{color:r.checkOut?"var(--red)":"var(--muted)"}}>{fmtTime(r.checkOut)}</td>
-                      <td style={{color:"var(--accent)"}}>{minsToHM(diffMins(r.checkIn,r.checkOut))}</td>
-                      <td><span className="badge" style={{background:s.bg,color:s.color,border:`1px solid ${s.color}40`,fontSize:9}}>{s.icon} {s.label}</span></td>
-                    </tr>
-                  ); })}
-                </tbody>
-              </table>
-            </div>
-          }
+          {myRecs.length===0?<div style={{textAlign:"center",padding:60,color:"var(--t3)"}}>ยังไม่มีประวัติ</div>
+          :<div className="card" style={{overflow:"hidden"}}>
+            <table>
+              <thead><tr><th>วันที่</th><th>เข้า</th><th>ออก</th><th>รวม</th><th>สถานะ</th></tr></thead>
+              <tbody>
+                {myRecs.map(r=>{ const s=STATUS(r,schedule); return(
+                  <tr key={r.date}>
+                    <td style={{color:"var(--t2)",fontSize:12}}>{fd(r.date)}</td>
+                    <td style={{color:"var(--green)",fontFamily:"'IBM Plex Mono',monospace"}}>{ft(r.checkIn)}</td>
+                    <td style={{color:r.checkOut?"var(--red)":"var(--t3)",fontFamily:"'IBM Plex Mono',monospace"}}>{ft(r.checkOut)}</td>
+                    <td style={{color:"var(--blue)",fontFamily:"'IBM Plex Mono',monospace"}}>{hm(dm(r.checkIn,r.checkOut))}</td>
+                    <td><span className="pill" style={{background:s.bg,color:s.color,border:`1px solid ${s.color}40`,fontSize:10}}>{s.label}</span></td>
+                  </tr>
+                ); })}
+              </tbody>
+            </table>
+          </div>}
         </div>
       )}
 
-      {/* Tab: Leave */}
-      {tab==="leave" && (
-        <div className="slide">
-          <div className="card" style={{padding:20,marginBottom:14}}>
-            <div style={{fontFamily:"'Syne',sans-serif",fontSize:11,letterSpacing:2,color:"var(--purple)",marginBottom:16}}>ส่งคำขอลา</div>
+      {/* ── TAB: leave ── */}
+      {tab==="leave"&&(
+        <div className="fade">
+          <div className="card" style={{padding:18,marginBottom:14}}>
+            <div style={{fontWeight:600,marginBottom:16,color:"var(--tx)"}}>📋 ส่งคำขอลา</div>
             <div style={{display:"grid",gap:12}}>
               <div>
-                <label style={{fontSize:10,color:"var(--muted)",letterSpacing:2,display:"block",marginBottom:7}}>ประเภทการลา</label>
-                <select value={leaveForm.type} onChange={e=>setLeaveForm({...leaveForm,type:e.target.value})}>
-                  <option value="sick">ลาป่วย</option>
-                  <option value="personal">ลากิจ</option>
-                  <option value="vacation">ลาพักร้อน</option>
+                <label style={{fontSize:12,color:"var(--t2)",display:"block",marginBottom:7}}>ประเภทการลา</label>
+                <select value={lf.type} onChange={e=>setLf({...lf,type:e.target.value})}>
+                  <option value="sick">🤒 ลาป่วย</option>
+                  <option value="personal">📝 ลากิจ</option>
+                  <option value="vacation">🌴 ลาพักร้อน</option>
                 </select>
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                <div>
-                  <label style={{fontSize:10,color:"var(--muted)",letterSpacing:2,display:"block",marginBottom:7}}>วันเริ่ม</label>
-                  <input type="date" value={leaveForm.startDate} onChange={e=>setLeaveForm({...leaveForm,startDate:e.target.value})}/>
-                </div>
-                <div>
-                  <label style={{fontSize:10,color:"var(--muted)",letterSpacing:2,display:"block",marginBottom:7}}>วันสุดท้าย</label>
-                  <input type="date" value={leaveForm.endDate} onChange={e=>setLeaveForm({...leaveForm,endDate:e.target.value})}/>
-                </div>
+                <div><label style={{fontSize:12,color:"var(--t2)",display:"block",marginBottom:7}}>วันเริ่มลา</label><input type="date" value={lf.start} onChange={e=>setLf({...lf,start:e.target.value})}/></div>
+                <div><label style={{fontSize:12,color:"var(--t2)",display:"block",marginBottom:7}}>วันสุดท้าย</label><input type="date" value={lf.end} onChange={e=>setLf({...lf,end:e.target.value})}/></div>
               </div>
               <div>
-                <label style={{fontSize:10,color:"var(--muted)",letterSpacing:2,display:"block",marginBottom:7}}>เหตุผล</label>
-                <textarea rows={3} value={leaveForm.reason} onChange={e=>setLeaveForm({...leaveForm,reason:e.target.value})} placeholder="ระบุเหตุผลการลา..." style={{resize:"vertical"}}/>
+                <label style={{fontSize:12,color:"var(--t2)",display:"block",marginBottom:7}}>เหตุผล</label>
+                <textarea rows={3} value={lf.reason} onChange={e=>setLf({...lf,reason:e.target.value})} placeholder="ระบุเหตุผล..." style={{resize:"vertical"}}/>
               </div>
             </div>
-            {msg && <div style={{background:msg.type==="ok"?"rgba(16,185,129,0.1)":"rgba(239,68,68,0.1)",border:`1px solid ${msg.type==="ok"?"rgba(16,185,129,0.3)":"rgba(239,68,68,0.3)"}`,borderRadius:8,padding:"10px 12px",margin:"12px 0",fontSize:12,color:msg.type==="ok"?"var(--green)":"var(--red)"}}>{msg.text}</div>}
-            <button onClick={submitLeave} disabled={busy} style={{marginTop:16,width:"100%",padding:12,background:"linear-gradient(135deg,#7c3aed,#a78bfa)",color:"#fff",fontWeight:600,letterSpacing:1}}>
+            {msg&&<div style={{background:msg.ok?"rgba(74,222,128,0.1)":"rgba(248,113,113,0.1)",border:`1px solid ${msg.ok?"rgba(74,222,128,0.3)":"rgba(248,113,113,0.3)"}`,borderRadius:8,padding:"10px 12px",marginTop:12,fontSize:13,color:msg.ok?"var(--green)":"var(--red)"}}>{msg.ok?"✓":"✗"} {msg.txt}</div>}
+            <button onClick={doLeave} disabled={busy} style={{marginTop:14,width:"100%",padding:11,background:"var(--purple)",color:"#fff",fontWeight:600,fontSize:14}}>
               {busy?"กำลังส่ง...":"ส่งคำขอลา"}
             </button>
           </div>
-
-          {/* Leave history */}
-          <div style={{fontSize:11,color:"var(--muted)",marginBottom:10}}>ประวัติการลา ({leaveUsed}/{leaveMax} วัน)</div>
+          <div style={{fontSize:12,color:"var(--t2)",marginBottom:10}}>ประวัติการลา {leaveUsed}/{leaveMax} วัน/ปีนี้</div>
           <div className="card" style={{overflow:"hidden"}}>
-            {allRecs.filter(r=>r.leaveType).length===0
-              ? <div style={{padding:30,textAlign:"center",color:"var(--muted)",fontSize:12}}>ยังไม่มีประวัติการลา</div>
-              : <table>
-                  <thead><tr><th>วันที่</th><th>ประเภท</th><th>สถานะ</th></tr></thead>
-                  <tbody>
-                    {allRecs.filter(r=>r.leaveType).map(r=>{
-                      const s=getStatus(r,schedule);
-                      return <tr key={r.date}><td style={{color:"var(--text)"}}>{fmtDate(r.date)}</td><td style={{color:"var(--purple)"}}>{r.leaveReason||"—"}</td><td><span className="badge" style={{background:s.bg,color:s.color,border:`1px solid ${s.color}40`,fontSize:9}}>{s.icon} {s.label}</span></td></tr>;
-                    })}
-                  </tbody>
-                </table>
+            {myRecs.filter(r=>r.leaveType).length===0
+              ?<div style={{padding:30,textAlign:"center",color:"var(--t3)",fontSize:13}}>ยังไม่มีประวัติการลา</div>
+              :<table>
+                <thead><tr><th>วันที่</th><th>ประเภท</th><th>เหตุผล</th></tr></thead>
+                <tbody>
+                  {myRecs.filter(r=>r.leaveType).map(r=>{
+                    const s=STATUS(r,schedule);
+                    return <tr key={r.date}><td style={{fontSize:12}}>{fd(r.date)}</td><td><span className="pill" style={{background:s.bg,color:s.color,border:`1px solid ${s.color}40`,fontSize:10}}>{s.label}</span></td><td style={{color:"var(--t2)",fontSize:12}}>{r.leaveReason||"—"}</td></tr>;
+                  })}
+                </tbody>
+              </table>
             }
           </div>
         </div>
@@ -484,156 +432,160 @@ function DashboardView({ user, records, location, schedule, onReload, onLogout }
 }
 
 // ─── Admin ────────────────────────────────────────────────────────────────────
-function AdminView({ user, employees, records, location, schedule, onReloadAll, onLogout }) {
-  const [tab,setTab]     = useState("overview");
-  const [date,setDate]   = useState(todayKey());
+function Admin({ user, employees, records, location, schedule, onReloadAll, onLogout }) {
+  const [tab,setTab] = useState("overview");
+  const [date,setDate] = useState(today());
   const [newEmp,setNewEmp] = useState({id:"",name:"",pin:""});
-  const [locForm,setLocForm] = useState({name:location?.name||"",lat:location?.lat||"",lng:location?.lng||"",radius:location?.radius||200});
-  const [schForm,setSchForm] = useState({startTime:schedule?.startTime||"08:30",endTime:schedule?.endTime||"17:30",graceMins:schedule?.graceMins||15,workDays:schedule?.workDays||"1,2,3,4,5",maxLeaveDays:schedule?.maxLeaveDays||10});
-  const [msg,setMsg]     = useState(null);
-  const [busy,setBusy]   = useState(false);
-  const [filterEmp,setFilterEmp] = useState("");
+  const [lf,setLf] = useState({name:location?.name||"",lat:location?.lat||"",lng:location?.lng||"",radius:location?.radius||200});
+  const [sf,setSf] = useState({startTime:schedule?.startTime||"08:30",endTime:schedule?.endTime||"17:30",graceMins:schedule?.graceMins||15,workDays:schedule?.workDays||"1,2,3,4,5",maxLeaveDays:schedule?.maxLeaveDays||10});
+  const [msg,setMsg] = useState(null);
+  const [busy,setBusy] = useState(false);
+  const [search,setSearch] = useState("");
 
-  useEffect(()=>{
-    if(location) setLocForm({name:location.name||"",lat:location.lat||"",lng:location.lng||"",radius:location.radius||200});
-    if(schedule) setSchForm({startTime:schedule.startTime||"08:30",endTime:schedule.endTime||"17:30",graceMins:schedule.graceMins||15,workDays:schedule.workDays||"1,2,3,4,5",maxLeaveDays:schedule.maxLeaveDays||10});
-  },[location,schedule]);
+  // sync when props change
+  useEffect(()=>{ if(location) setLf({name:location.name||"",lat:location.lat||"",lng:location.lng||"",radius:location.radius||200}); },[location]);
+  useEffect(()=>{ if(schedule) setSf({startTime:schedule.startTime||"08:30",endTime:schedule.endTime||"17:30",graceMins:schedule.graceMins||15,workDays:schedule.workDays||"1,2,3,4,5",maxLeaveDays:schedule.maxLeaveDays||10}); },[schedule]);
 
-  const showMsg = (text,type="ok") => { setMsg({text,type}); setTimeout(()=>setMsg(null),3500); };
+  const showMsg=(ok,txt)=>{ setMsg({ok,txt}); setTimeout(()=>setMsg(null),3500); };
 
-  const addEmployee = async () => {
-    if(!newEmp.id||!newEmp.name||!newEmp.pin) return showMsg("กรอกข้อมูลให้ครบ","err");
-    if(employees.find(e=>e.id===newEmp.id.toUpperCase())) return showMsg("รหัสนี้มีอยู่แล้ว","err");
+  const addEmp = async () => {
+    if(!newEmp.id||!newEmp.name||!newEmp.pin) return showMsg(false,"กรอกข้อมูลให้ครบ");
+    if(employees.find(e=>e.id===newEmp.id.toUpperCase())) return showMsg(false,"รหัสนี้มีอยู่แล้ว");
     setBusy(true);
-    const res = await api("addEmployee",{id:newEmp.id.toUpperCase(),name:newEmp.name,pin:newEmp.pin,role:"employee"});
-    if(res.success){ await onReloadAll(); setNewEmp({id:"",name:"",pin:""}); showMsg(`เพิ่ม ${newEmp.name} สำเร็จ`); }
-    else showMsg(res.message||"เกิดข้อผิดพลาด","err");
+    const r=await api("addEmployee",{id:newEmp.id.toUpperCase(),name:newEmp.name,pin:newEmp.pin,role:"employee"});
+    if(r.success){ await onReloadAll(); setNewEmp({id:"",name:"",pin:""}); showMsg(true,`เพิ่ม ${newEmp.name} สำเร็จ`); }
+    else showMsg(false,r.message);
     setBusy(false);
   };
-
-  const removeEmployee = async (id) => {
-    if(id===user.id||!window.confirm(`ลบ ${id} ?`)) return;
+  const delEmp = async id => {
+    if(id===user.id||!window.confirm(`ลบ ${id}?`)) return;
     setBusy(true);
-    const res = await api("deleteEmployee",{id});
-    if(res.success){ await onReloadAll(); showMsg("ลบแล้ว"); }
-    else showMsg(res.message,"err");
+    const r=await api("deleteEmployee",{id});
+    if(r.success){ await onReloadAll(); showMsg(true,"ลบสำเร็จ"); }
+    else showMsg(false,r.message);
     setBusy(false);
   };
-
-  const saveLocation = async () => {
-    if(!locForm.lat||!locForm.lng) return showMsg("กรอกพิกัดให้ครบ","err");
+  const saveLoc = async () => {
+    if(!lf.lat||!lf.lng) return showMsg(false,"กรุณากรอกพิกัด Lat/Lng");
     setBusy(true);
-    const res = await api("saveConfig",{configKey:"location",data:JSON.stringify({name:locForm.name,lat:parseFloat(locForm.lat),lng:parseFloat(locForm.lng),radius:parseInt(locForm.radius)})});
-    if(res.success){ await onReloadAll(); showMsg("บันทึกพิกัดสำเร็จ"); }
-    else showMsg(res.message||"ผิดพลาด","err");
+    const r=await api("saveConfig",{configKey:"location",data:JSON.stringify({name:lf.name,lat:+lf.lat,lng:+lf.lng,radius:+lf.radius})});
+    if(r.success){ await onReloadAll(); showMsg(true,"บันทึกพิกัดสำเร็จ"); }
+    else showMsg(false,r.message);
     setBusy(false);
   };
-
-  const saveSchedule = async () => {
+  const saveSch = async () => {
     setBusy(true);
-    const res = await api("saveConfig",{configKey:"schedule",data:JSON.stringify({startTime:schForm.startTime,endTime:schForm.endTime,graceMins:parseInt(schForm.graceMins),workDays:schForm.workDays,maxLeaveDays:parseInt(schForm.maxLeaveDays)})});
-    if(res.success){ await onReloadAll(); showMsg("บันทึกตารางงานสำเร็จ"); }
-    else showMsg(res.message||"ผิดพลาด","err");
+    const r=await api("saveConfig",{configKey:"schedule",data:JSON.stringify({startTime:sf.startTime,endTime:sf.endTime,graceMins:+sf.graceMins,workDays:sf.workDays,maxLeaveDays:+sf.maxLeaveDays})});
+    if(r.success){ await onReloadAll(); showMsg(true,"บันทึกตารางงานสำเร็จ"); }
+    else showMsg(false,r.message);
     setBusy(false);
   };
-
   const exportAll = () => {
     const rows=[["วันที่","รหัส","ชื่อ","เข้างาน","ออกงาน","รวม","สถานะ"]];
     Object.entries(records).sort((a,b)=>b[0].localeCompare(a[0])).forEach(([d,day])=>{
-      Object.entries(day).forEach(([empId,r])=>{
-        const emp=employees.find(e=>e.id===empId);
-        const s=getStatus(r,schedule);
-        rows.push([d,empId,emp?.name||"—",fmtTime(r.checkIn),fmtTime(r.checkOut),minsToHM(diffMins(r.checkIn,r.checkOut)),s.label]);
+      Object.entries(day).forEach(([eid,r])=>{
+        const e=employees.find(x=>x.id===eid); const s=STATUS(r,schedule);
+        rows.push([d,eid,e?.name||"—",ft(r.checkIn),ft(r.checkOut),hm(dm(r.checkIn,r.checkOut)),s.label]);
       });
     });
-    const a=document.createElement("a");
-    a.href=URL.createObjectURL(new Blob(["\uFEFF"+rows.map(r=>r.join(",")).join("\n")],{type:"text/csv;charset=utf-8;"}));
-    a.download=`attendance_all_${todayKey()}.csv`; a.click();
+    const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob(["\uFEFF"+rows.map(r=>r.join(",")).join("\n")],{type:"text/csv;charset=utf-8;"}));
+    a.download=`attendance_all_${today()}.csv`; a.click();
   };
 
-  const dayRecs  = records[date]||{};
-  const staffEmps = employees.filter(e=>e.role!=="admin");
-  const filteredEmps = staffEmps.filter(e=>!filterEmp||e.name.includes(filterEmp)||e.id.includes(filterEmp.toUpperCase()));
+  const staff = employees.filter(e=>e.role!=="admin");
+  const dayRecs = records[date]||{};
+  const filtered = staff.filter(e=>!search||e.name.includes(search)||e.id.includes(search.toUpperCase()));
 
-  // Global stats
-  const thisMonth = new Date().toISOString().slice(0,7);
-  const allDayRecs = Object.entries(records).filter(([d])=>d.startsWith(thisMonth)).flatMap(([,d])=>Object.values(d));
-  const statPresent = allDayRecs.filter(r=>r.checkIn&&!r.leaveType).length;
-  const statLate    = allDayRecs.filter(r=>getStatus(r,schedule).label==="มาสาย").length;
-  const statLeave   = allDayRecs.filter(r=>r.leaveType).length;
-  const statTotal   = allDayRecs.reduce((s,r)=>s+(diffMins(r.checkIn,r.checkOut)||0),0);
+  const mo=today().slice(0,7);
+  const moAll=Object.entries(records).filter(([d])=>d.startsWith(mo)).flatMap(([,d])=>Object.values(d));
+  const statIn=moAll.filter(r=>r.checkIn&&!r.leaveType).length;
+  const statLate=moAll.filter(r=>STATUS(r,schedule).label.startsWith("มาสาย")).length;
+  const statLeave=moAll.filter(r=>r.leaveType).length;
+  const statHrs=moAll.reduce((s,r)=>s+(dm(r.checkIn,r.checkOut)||0),0);
 
-  const adminTabs = [["overview",I.chart,"ภาพรวม"],["employees",I.user,"พนักงาน"],["location",I.pin,"พิกัด"],["schedule",I.clock,"ตารางงาน"]];
+  // config status display
+  const locOk = location?.lat&&location?.lng;
+  const schOk = schedule?.startTime;
 
   return (
-    <div style={{maxWidth:900,margin:"0 auto",padding:"16px 14px",minHeight:"100vh"}}>
+    <div style={{maxWidth:900,margin:"0 auto",padding:"16px 14px 40px",minHeight:"100vh"}}>
       {/* Header */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20,flexWrap:"wrap",gap:10}}>
         <div>
-          <div style={{fontFamily:"'Syne',sans-serif",fontSize:20,fontWeight:800,letterSpacing:2,color:"var(--text)"}}>ADMIN PANEL</div>
-          <div style={{fontSize:11,color:"var(--muted)"}}>TIMECLOCK v2 · {user.name}</div>
+          <div style={{fontSize:20,fontWeight:700,color:"var(--tx)"}}>⚙ Admin Panel</div>
+          <div style={{fontSize:12,color:"var(--t3)"}}>TimeClock · {user.name}</div>
         </div>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          <button onClick={onReloadAll} style={{background:"var(--bg2)",color:"var(--muted)",border:"1px solid var(--border)",padding:"7px 12px",display:"flex",alignItems:"center",gap:6}}>{I.refresh} รีเฟรช</button>
-          <button onClick={exportAll} style={{background:"var(--accent)",color:"#000",padding:"7px 14px",display:"flex",alignItems:"center",gap:6,fontWeight:600}}>{I.dl} CSV ทั้งหมด</button>
-          <button onClick={onLogout} style={{background:"var(--bg2)",color:"var(--muted)",border:"1px solid var(--border)",padding:"7px 12px",display:"flex",alignItems:"center",gap:6}}>{I.logout} ออก</button>
+          <button onClick={onReloadAll} style={{background:"var(--s2)",color:"var(--t2)",border:"1.5px solid var(--br)",padding:"7px 14px",fontSize:13}}>🔄 รีเฟรช</button>
+          <button onClick={exportAll}   style={{background:"var(--blue)",color:"#fff",padding:"7px 14px",fontSize:13,fontWeight:600}}>⬇ CSV ทั้งหมด</button>
+          <button onClick={onLogout}    style={{background:"var(--s2)",color:"var(--t2)",border:"1.5px solid var(--br)",padding:"7px 14px",fontSize:13}}>ออก</button>
         </div>
       </div>
 
-      {msg && <div style={{background:msg.type==="ok"?"rgba(16,185,129,0.1)":"rgba(239,68,68,0.1)",border:`1px solid ${msg.type==="ok"?"rgba(16,185,129,0.3)":"rgba(239,68,68,0.3)"}`,borderRadius:10,padding:"11px 16px",marginBottom:14,fontSize:12,color:msg.type==="ok"?"var(--green)":"var(--red)",display:"flex",gap:8,alignItems:"center"}}>
-        {msg.type==="ok"?I.ok:I.err} {msg.text}
-      </div>}
-
-      {/* Stats */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:20}}>
-        {[["พนักงาน",staffEmps.length,"var(--accent)"],["เข้างาน/เดือน",statPresent,"var(--green)"],["มาสาย/เดือน",statLate,"var(--yellow)"],["ลา/เดือน",statLeave,"var(--purple)"]].map(([l,v,c])=>(
-          <div key={l} className="card" style={{padding:"16px 12px",textAlign:"center"}}>
-            <div style={{fontFamily:"'Syne',sans-serif",fontSize:32,fontWeight:800,color:c,lineHeight:1}}>{v}</div>
-            <div style={{fontSize:9,color:"var(--muted)",marginTop:5,letterSpacing:1}}>{l}</div>
+      {/* Config status banners */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
+        {[
+          {ok:locOk,label:"พิกัดสำนักงาน",detail:locOk?`${location.name||"ไม่มีชื่อ"} · ${location.lat?.toFixed(4)},${location.lng?.toFixed(4)} r=${location.radius}ม.`:"⚠ ยังไม่ได้ตั้งค่า — ไปที่แท็บ 'พิกัด'",tab:"location"},
+          {ok:schOk,label:"ตารางงาน",detail:schOk?`${schedule.startTime}–${schedule.endTime} ผ่อนผัน ${schedule.graceMins}น. ลา ${schedule.maxLeaveDays}วัน/ปี`:"⚠ ยังไม่ได้ตั้งค่า — ไปที่แท็บ 'ตารางงาน'",tab:"schedule"},
+        ].map(b=>(
+          <div key={b.tab} onClick={()=>setTab(b.tab)} className="card" style={{padding:"12px 14px",cursor:"pointer",borderColor:b.ok?"var(--br)":"rgba(251,191,36,0.4)",background:b.ok?"var(--s1)":"rgba(251,191,36,0.05)"}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+              <span style={{width:8,height:8,borderRadius:"50%",background:b.ok?"var(--green)":"var(--yellow)",display:"inline-block",flexShrink:0}}/>
+              <span style={{fontSize:12,fontWeight:600,color:"var(--tx)"}}>{b.label}</span>
+            </div>
+            <div style={{fontSize:11,color:"var(--t2)",lineHeight:1.5}}>{b.detail}</div>
           </div>
         ))}
       </div>
 
-      {/* Total hours bar */}
-      <div className="card" style={{padding:"12px 16px",marginBottom:14,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <span style={{fontSize:11,color:"var(--muted)"}}>⏱ รวมชั่วโมงทำงานเดือนนี้ (ทีม)</span>
-        <span style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:700,color:"var(--accent)"}}>{minsToHM(statTotal)}</span>
+      {msg&&<div style={{background:msg.ok?"rgba(74,222,128,0.1)":"rgba(248,113,113,0.1)",border:`1px solid ${msg.ok?"rgba(74,222,128,0.3)":"rgba(248,113,113,0.3)"}`,borderRadius:10,padding:"11px 16px",marginBottom:14,fontSize:13,color:msg.ok?"var(--green)":"var(--red)"}}>
+        {msg.ok?"✓":"✗"} {msg.txt}
+      </div>}
+
+      {/* Stats */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>
+        {[["พนักงาน",staff.length,"var(--blue)"],["เข้า/เดือน",statIn,"var(--green)"],["สาย/เดือน",statLate,"var(--yellow)"],["ลา/เดือน",statLeave,"var(--purple)"]].map(([l,v,c])=>(
+          <div key={l} className="card" style={{padding:"14px 10px",textAlign:"center"}}>
+            <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:28,fontWeight:600,color:c,lineHeight:1}}>{v}</div>
+            <div style={{fontSize:10,color:"var(--t3)",marginTop:5}}>{l}</div>
+          </div>
+        ))}
+      </div>
+      <div className="card" style={{padding:"11px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <span style={{fontSize:13,color:"var(--t2)"}}>⏱ ชั่วโมงรวมทีมเดือนนี้</span>
+        <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:20,fontWeight:600,color:"var(--cyan)"}}>{hm(statHrs)}</span>
       </div>
 
       {/* Tabs */}
       <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
-        {adminTabs.map(([k,ic,lb])=>(
-          <button key={k} onClick={()=>setTab(k)} style={{padding:"9px 16px",display:"flex",alignItems:"center",gap:7,background:tab===k?"var(--accent)":"var(--bg2)",color:tab===k?"#000":"var(--muted)",border:`1px solid ${tab===k?"var(--accent)":"var(--border)"}`,fontFamily:"'JetBrains Mono',monospace",borderRadius:10}}>
-            {ic} {lb}
+        {[["overview","ภาพรวม"],["employees","พนักงาน"],["location","พิกัด"],["schedule","ตารางงาน"]].map(([k,lb])=>(
+          <button key={k} onClick={()=>setTab(k)} style={{padding:"9px 18px",background:tab===k?"var(--blue)":"var(--s1)",color:tab===k?"#fff":"var(--t2)",border:`1.5px solid ${tab===k?"var(--blue)":"var(--br)"}`,borderRadius:9,fontSize:13,fontWeight:tab===k?600:400}}>
+            {lb}
           </button>
         ))}
       </div>
 
       {/* ─── Overview ─── */}
-      {tab==="overview" && (
-        <div className="slide">
-          <div style={{display:"flex",gap:10,marginBottom:14,alignItems:"center",flexWrap:"wrap"}}>
-            <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{maxWidth:180}}/>
-            <div style={{fontSize:11,color:"var(--muted)"}}>{Object.keys(dayRecs).length}/{staffEmps.length} คนเข้างาน</div>
-            <input placeholder="ค้นหาพนักงาน..." value={filterEmp} onChange={e=>setFilterEmp(e.target.value)} style={{maxWidth:200,flex:1}}/>
+      {tab==="overview"&&(
+        <div className="fade">
+          <div style={{display:"flex",gap:10,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+            <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{width:170}}/>
+            <input placeholder="ค้นหาพนักงาน..." value={search} onChange={e=>setSearch(e.target.value)} style={{flex:1,minWidth:140}}/>
+            <span style={{fontSize:12,color:"var(--t2)",whiteSpace:"nowrap"}}>{Object.keys(dayRecs).length}/{staff.length} คน</span>
           </div>
           <div className="card" style={{overflow:"hidden"}}>
             <table>
               <thead><tr><th>พนักงาน</th><th>เข้างาน</th><th>ออกงาน</th><th>รวม</th><th>สถานะ</th></tr></thead>
               <tbody>
-                {filteredEmps.map(emp=>{
-                  const r=dayRecs[emp.id];
-                  const s=getStatus(r,schedule);
-                  return (
-                    <tr key={emp.id}>
-                      <td><div style={{color:"var(--text)",fontWeight:500}}>{emp.name}</div><div style={{fontSize:10,color:"var(--muted)"}}>{emp.id}</div></td>
-                      <td style={{color:r?.checkIn?"var(--green)":"var(--muted)"}}>{fmtTime(r?.checkIn)}</td>
-                      <td style={{color:r?.checkOut?"var(--red)":"var(--muted)"}}>{fmtTime(r?.checkOut)}</td>
-                      <td style={{color:"var(--accent)"}}>{r?minsToHM(diffMins(r.checkIn,r.checkOut)):"—"}</td>
-                      <td><span className="badge" style={{background:s.bg,color:s.color,border:`1px solid ${s.color}40`,fontSize:9}}>{s.icon} {s.label}</span></td>
-                    </tr>
-                  );
-                })}
+                {filtered.map(e=>{ const r=dayRecs[e.id]; const s=STATUS(r,schedule); return(
+                  <tr key={e.id}>
+                    <td><div style={{fontWeight:500}}>{e.name}</div><div style={{fontSize:11,color:"var(--t3)"}}>{e.id}</div></td>
+                    <td style={{fontFamily:"'IBM Plex Mono',monospace",color:r?.checkIn?"var(--green)":"var(--t3)"}}>{ft(r?.checkIn)}</td>
+                    <td style={{fontFamily:"'IBM Plex Mono',monospace",color:r?.checkOut?"var(--red)":"var(--t3)"}}>{ft(r?.checkOut)}</td>
+                    <td style={{fontFamily:"'IBM Plex Mono',monospace",color:"var(--blue)"}}>{r?hm(dm(r.checkIn,r.checkOut)):"—"}</td>
+                    <td><span className="pill" style={{background:s.bg,color:s.color,border:`1px solid ${s.color}40`,fontSize:10}}>{s.label}</span></td>
+                  </tr>
+                ); })}
               </tbody>
             </table>
           </div>
@@ -641,36 +593,30 @@ function AdminView({ user, employees, records, location, schedule, onReloadAll, 
       )}
 
       {/* ─── Employees ─── */}
-      {tab==="employees" && (
-        <div className="slide">
-          <div className="card" style={{padding:20,marginBottom:14}}>
-            <div style={{fontFamily:"'Syne',sans-serif",fontSize:11,letterSpacing:2,color:"var(--accent)",marginBottom:16}}>เพิ่มพนักงานใหม่</div>
+      {tab==="employees"&&(
+        <div className="fade">
+          <div className="card" style={{padding:18,marginBottom:14}}>
+            <div style={{fontWeight:600,marginBottom:14}}>เพิ่มพนักงานใหม่</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 2fr 1fr",gap:10,marginBottom:12}}>
               <input placeholder="รหัส (EMP003)" value={newEmp.id} onChange={e=>setNewEmp({...newEmp,id:e.target.value.toUpperCase()})}/>
               <input placeholder="ชื่อ-นามสกุล" value={newEmp.name} onChange={e=>setNewEmp({...newEmp,name:e.target.value})}/>
               <input placeholder="PIN" type="password" value={newEmp.pin} onChange={e=>setNewEmp({...newEmp,pin:e.target.value})}/>
             </div>
-            <button onClick={addEmployee} disabled={busy} style={{background:busy?"var(--muted)":"linear-gradient(135deg,var(--accent),var(--accent2))",color:"#fff",padding:"10px 20px",fontWeight:600}}>
-              {busy?"กำลังบันทึก...":"+ เพิ่มพนักงาน"}
-            </button>
+            <button onClick={addEmp} disabled={busy} style={{background:"var(--blue)",color:"#fff",padding:"10px 20px",fontWeight:600}}>+ เพิ่มพนักงาน</button>
           </div>
           <div className="card" style={{overflow:"hidden"}}>
             <table>
               <thead><tr><th>รหัส</th><th>ชื่อ</th><th>บทบาท</th><th>ลาคงเหลือ</th><th></th></tr></thead>
               <tbody>
-                {employees.map(emp=>{
-                  const used=Object.values(records).flatMap(d=>Object.entries(d)).filter(([eid,r])=>eid===emp.id&&r.leaveType).length;
-                  const left=Math.max(0,(schedule?.maxLeaveDays||10)-used);
-                  return (
-                    <tr key={emp.id}>
-                      <td style={{color:"var(--accent)",fontWeight:500}}>{emp.id}</td>
-                      <td style={{color:"var(--text)"}}>{emp.name}</td>
-                      <td><span className="badge" style={{background:emp.role==="admin"?"rgba(245,158,11,0.15)":"rgba(0,229,255,0.1)",color:emp.role==="admin"?"var(--yellow)":"var(--accent)",border:`1px solid ${emp.role==="admin"?"rgba(245,158,11,0.3)":"rgba(0,229,255,0.3)"}`}}>{emp.role==="admin"?"ผู้ดูแล":"พนักงาน"}</span></td>
-                      <td style={{color:"var(--purple)"}}>{left}/{schedule?.maxLeaveDays||10} วัน</td>
-                      <td>{emp.id!==user.id&&<button onClick={()=>removeEmployee(emp.id)} disabled={busy} style={{background:"rgba(239,68,68,0.15)",color:"var(--red)",border:"1px solid rgba(239,68,68,0.3)",padding:"4px 10px",fontSize:11}}>ลบ</button>}</td>
-                    </tr>
-                  );
-                })}
+                {employees.map(e=>{ const used=Object.values(records).flatMap(d=>Object.entries(d)).filter(([id,r])=>id===e.id&&r.leaveType).length; const left=Math.max(0,(schedule?.maxLeaveDays||10)-used); return(
+                  <tr key={e.id}>
+                    <td style={{fontFamily:"'IBM Plex Mono',monospace",color:"var(--blue)",fontWeight:500}}>{e.id}</td>
+                    <td>{e.name}</td>
+                    <td><span className="pill" style={{background:e.role==="admin"?"rgba(251,191,36,0.15)":"rgba(79,142,247,0.15)",color:e.role==="admin"?"var(--yellow)":"var(--blue)",border:`1px solid ${e.role==="admin"?"rgba(251,191,36,0.3)":"rgba(79,142,247,0.3)"}`}}>{e.role==="admin"?"ผู้ดูแล":"พนักงาน"}</span></td>
+                    <td style={{color:"var(--purple)",fontFamily:"'IBM Plex Mono',monospace"}}>{left}/{schedule?.maxLeaveDays||10}</td>
+                    <td>{e.id!==user.id&&<button onClick={()=>delEmp(e.id)} disabled={busy} style={{background:"rgba(248,113,113,0.15)",color:"var(--red)",border:"1px solid rgba(248,113,113,0.3)",padding:"4px 10px",fontSize:12}}>ลบ</button>}</td>
+                  </tr>
+                ); })}
               </tbody>
             </table>
           </div>
@@ -678,86 +624,91 @@ function AdminView({ user, employees, records, location, schedule, onReloadAll, 
       )}
 
       {/* ─── Location ─── */}
-      {tab==="location" && (
-        <div className="slide">
-          <div className="card" style={{padding:24}}>
-            <div style={{fontFamily:"'Syne',sans-serif",fontSize:11,letterSpacing:2,color:"var(--accent)",marginBottom:20}}>ตั้งค่าพิกัดสำนักงาน</div>
-            <div style={{display:"grid",gap:14}}>
-              <div>
-                <label style={{fontSize:10,color:"var(--muted)",letterSpacing:2,display:"block",marginBottom:7}}>ชื่อสถานที่</label>
-                <input value={locForm.name} onChange={e=>setLocForm({...locForm,name:e.target.value})} placeholder="ออฟฟิศบางแก้ว"/>
+      {tab==="location"&&(
+        <div className="fade">
+          {/* current status */}
+          <div className="card" style={{padding:"14px 16px",marginBottom:14,background:locOk?"rgba(74,222,128,0.05)":"rgba(251,191,36,0.05)",borderColor:locOk?"rgba(74,222,128,0.3)":"rgba(251,191,36,0.4)"}}>
+            <div style={{fontSize:12,fontWeight:600,color:locOk?"var(--green)":"var(--yellow)",marginBottom:6}}>{locOk?"✓ ตั้งค่าแล้ว":"⚠ ยังไม่ได้ตั้งค่าพิกัด"}</div>
+            {locOk?<div style={{fontSize:12,color:"var(--t2)",lineHeight:1.8}}>
+              <div>📍 {location.name}</div>
+              <div>Lat: {location.lat} · Lng: {location.lng}</div>
+              <div>รัศมี: {location.radius} เมตร</div>
+            </div>:<div style={{fontSize:12,color:"var(--t3)"}}>พนักงานจะไม่สามารถเช็คอินได้จนกว่าจะตั้งค่าพิกัด</div>}
+          </div>
+
+          <div className="card" style={{padding:20}}>
+            <div style={{fontWeight:600,marginBottom:16}}>แก้ไขพิกัดสำนักงาน</div>
+            <div style={{display:"grid",gap:13}}>
+              <div><label style={{fontSize:12,color:"var(--t2)",display:"block",marginBottom:7}}>ชื่อสถานที่</label><input value={lf.name} onChange={e=>setLf({...lf,name:e.target.value})} placeholder="ออฟฟิศบางแก้ว"/></div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <div><label style={{fontSize:12,color:"var(--t2)",display:"block",marginBottom:7}}>Latitude</label><input type="number" step="0.00001" value={lf.lat} onChange={e=>setLf({...lf,lat:e.target.value})}/></div>
+                <div><label style={{fontSize:12,color:"var(--t2)",display:"block",marginBottom:7}}>Longitude</label><input type="number" step="0.00001" value={lf.lng} onChange={e=>setLf({...lf,lng:e.target.value})}/></div>
               </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-                <div><label style={{fontSize:10,color:"var(--muted)",display:"block",marginBottom:7}}>Latitude</label><input type="number" step="0.00001" value={locForm.lat} onChange={e=>setLocForm({...locForm,lat:e.target.value})}/></div>
-                <div><label style={{fontSize:10,color:"var(--muted)",display:"block",marginBottom:7}}>Longitude</label><input type="number" step="0.00001" value={locForm.lng} onChange={e=>setLocForm({...locForm,lng:e.target.value})}/></div>
-              </div>
               <div>
-                <label style={{fontSize:10,color:"var(--muted)",letterSpacing:2,display:"block",marginBottom:7}}>รัศมี: {locForm.radius} เมตร</label>
-                <input type="range" min="50" max="1000" step="25" value={locForm.radius} onChange={e=>setLocForm({...locForm,radius:e.target.value})} style={{width:"100%",accentColor:"var(--accent)",background:"transparent",border:"none"}}/>
+                <label style={{fontSize:12,color:"var(--t2)",display:"block",marginBottom:7}}>รัศมีที่อนุญาต: <strong style={{color:"var(--tx)"}}>{lf.radius} เมตร</strong></label>
+                <input type="range" min="50" max="1000" step="25" value={lf.radius} onChange={e=>setLf({...lf,radius:e.target.value})} style={{width:"100%",accentColor:"var(--blue)",background:"transparent",border:"none"}}/>
               </div>
             </div>
-            <button onClick={saveLocation} disabled={busy} style={{marginTop:20,background:"linear-gradient(135deg,var(--accent),var(--accent2))",color:"#fff",padding:"11px 24px",fontWeight:600}}>
-              {busy?"กำลังบันทึก...":"บันทึกพิกัด →"}
-            </button>
+            <button onClick={saveLoc} disabled={busy} style={{marginTop:16,background:"var(--blue)",color:"#fff",padding:"11px 24px",fontWeight:600}}>บันทึกพิกัด</button>
+            <div style={{marginTop:14,background:"var(--s2)",borderRadius:8,padding:"12px 14px",fontSize:12,color:"var(--t2)",lineHeight:2}}>
+              <div style={{fontWeight:600,marginBottom:4}}>📍 วิธีหาพิกัด:</div>
+              <div>1. เปิด Google Maps → ค้นหา Q5WC+5PW นครชัยศรี</div>
+              <div>2. กดค้างที่ตำแหน่ง → พิกัดจะขึ้นด้านล่าง เช่น 13.795, 100.161</div>
+              <div>3. ใส่ในช่อง Lat/Lng แล้วกดบันทึก</div>
+            </div>
           </div>
         </div>
       )}
 
       {/* ─── Schedule ─── */}
-      {tab==="schedule" && (
-        <div className="slide">
-          <div className="card" style={{padding:24}}>
-            <div style={{fontFamily:"'Syne',sans-serif",fontSize:11,letterSpacing:2,color:"var(--accent)",marginBottom:20}}>ตั้งค่าเวลาทำงาน</div>
+      {tab==="schedule"&&(
+        <div className="fade">
+          {/* current status */}
+          <div className="card" style={{padding:"14px 16px",marginBottom:14,background:schOk?"rgba(74,222,128,0.05)":"rgba(251,191,36,0.05)",borderColor:schOk?"rgba(74,222,128,0.3)":"rgba(251,191,36,0.4)"}}>
+            <div style={{fontSize:12,fontWeight:600,color:schOk?"var(--green)":"var(--yellow)",marginBottom:6}}>{schOk?"✓ ตั้งค่าแล้ว":"⚠ ยังไม่ได้ตั้งค่า"}</div>
+            {schOk?<div style={{fontSize:12,color:"var(--t2)",lineHeight:1.8}}>
+              <div>🕐 เวลางาน: {schedule.startTime} – {schedule.endTime}</div>
+              <div>⚡ ผ่อนผันมาสาย: {schedule.graceMins} นาที (นับสายหลัง {addMins(schedule.startTime,+schedule.graceMins)})</div>
+              <div>📋 วันลาสูงสุด: {schedule.maxLeaveDays} วัน/ปี/คน</div>
+            </div>:<div style={{fontSize:12,color:"var(--t3)"}}>ระบบจะใช้ค่า default: 08:30–17:30 ผ่อนผัน 15 น.</div>}
+          </div>
+
+          <div className="card" style={{padding:20}}>
+            <div style={{fontWeight:600,marginBottom:16}}>แก้ไขตารางงาน</div>
             <div style={{display:"grid",gap:14}}>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-                <div>
-                  <label style={{fontSize:10,color:"var(--muted)",letterSpacing:2,display:"block",marginBottom:7}}>เวลาเข้างาน</label>
-                  <input type="time" value={schForm.startTime} onChange={e=>setSchForm({...schForm,startTime:e.target.value})}/>
-                </div>
-                <div>
-                  <label style={{fontSize:10,color:"var(--muted)",letterSpacing:2,display:"block",marginBottom:7}}>เวลาออกงาน</label>
-                  <input type="time" value={schForm.endTime} onChange={e=>setSchForm({...schForm,endTime:e.target.value})}/>
-                </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <div><label style={{fontSize:12,color:"var(--t2)",display:"block",marginBottom:7}}>เวลาเข้างาน</label><input type="time" value={sf.startTime} onChange={e=>setSf({...sf,startTime:e.target.value})}/></div>
+                <div><label style={{fontSize:12,color:"var(--t2)",display:"block",marginBottom:7}}>เวลาออกงาน</label><input type="time" value={sf.endTime} onChange={e=>setSf({...sf,endTime:e.target.value})}/></div>
               </div>
               <div>
-                <label style={{fontSize:10,color:"var(--muted)",letterSpacing:2,display:"block",marginBottom:7}}>ระยะผ่อนผันการมาสาย: {schForm.graceMins} นาที</label>
-                <input type="range" min="0" max="60" step="5" value={schForm.graceMins} onChange={e=>setSchForm({...schForm,graceMins:e.target.value})} style={{width:"100%",accentColor:"var(--yellow)",background:"transparent",border:"none"}}/>
-                <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"var(--muted)",marginTop:4}}><span>0 น.</span><span>60 น.</span></div>
+                <label style={{fontSize:12,color:"var(--t2)",display:"block",marginBottom:7}}>ระยะผ่อนผันมาสาย: <strong style={{color:"var(--tx)"}}>{sf.graceMins} นาที</strong></label>
+                <input type="range" min="0" max="60" step="5" value={sf.graceMins} onChange={e=>setSf({...sf,graceMins:e.target.value})} style={{width:"100%",accentColor:"var(--yellow)",background:"transparent",border:"none"}}/>
               </div>
               <div>
-                <label style={{fontSize:10,color:"var(--muted)",letterSpacing:2,display:"block",marginBottom:7}}>วันลาสูงสุดต่อปี (ต่อคน): {schForm.maxLeaveDays} วัน</label>
-                <input type="range" min="1" max="30" step="1" value={schForm.maxLeaveDays} onChange={e=>setSchForm({...schForm,maxLeaveDays:e.target.value})} style={{width:"100%",accentColor:"var(--purple)",background:"transparent",border:"none"}}/>
-                <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"var(--muted)",marginTop:4}}><span>1 วัน</span><span>30 วัน</span></div>
+                <label style={{fontSize:12,color:"var(--t2)",display:"block",marginBottom:7}}>วันลาสูงสุดต่อปี (ต่อคน): <strong style={{color:"var(--tx)"}}>{sf.maxLeaveDays} วัน</strong></label>
+                <input type="range" min="1" max="30" step="1" value={sf.maxLeaveDays} onChange={e=>setSf({...sf,maxLeaveDays:e.target.value})} style={{width:"100%",accentColor:"var(--purple)",background:"transparent",border:"none"}}/>
               </div>
               <div>
-                <label style={{fontSize:10,color:"var(--muted)",letterSpacing:2,display:"block",marginBottom:10}}>วันทำงาน</label>
+                <label style={{fontSize:12,color:"var(--t2)",display:"block",marginBottom:10}}>วันทำงาน</label>
                 <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                   {["อา","จ","อ","พ","พฤ","ศ","ส"].map((d,i)=>{
-                    const days=schForm.workDays.split(",").map(Number);
+                    const days=sf.workDays.split(",").filter(Boolean).map(Number);
                     const on=days.includes(i);
-                    return <button key={i} onClick={()=>{
-                      const cur=schForm.workDays.split(",").map(Number).filter(Boolean);
-                      const nxt=on?cur.filter(x=>x!==i):[...cur,i].sort();
-                      setSchForm({...schForm,workDays:nxt.join(",")});
-                    }} style={{width:40,height:40,borderRadius:8,background:on?"var(--accent)":"var(--bg3)",color:on?"#000":"var(--muted)",border:`1px solid ${on?"var(--accent)":"var(--border)"}`,fontSize:12,fontWeight:on?600:400}}>{d}</button>;
+                    return <button key={i} onClick={()=>{ const n=on?days.filter(x=>x!==i):[...days,i].sort(); setSf({...sf,workDays:n.join(",")}); }} style={{width:44,height:44,borderRadius:9,background:on?"var(--blue)":"var(--s2)",color:on?"#fff":"var(--t3)",border:`1.5px solid ${on?"var(--blue)":"var(--br)"}`,fontWeight:on?600:400}}>{d}</button>;
                   })}
                 </div>
               </div>
             </div>
 
             {/* Preview */}
-            <div style={{marginTop:20,background:"var(--bg3)",borderRadius:10,padding:14,fontSize:12,color:"var(--muted)",lineHeight:2}}>
-              <div style={{color:"var(--accent)",marginBottom:4,fontSize:10,letterSpacing:2}}>PREVIEW</div>
-              <div>🕐 เวลางาน <span style={{color:"var(--text)"}}>{schForm.startTime} — {schForm.endTime} น.</span></div>
-              <div>⚡ ผ่อนผันมาสาย <span style={{color:"var(--yellow)"}}>{schForm.graceMins} นาที</span> (นับสายหลัง {
-                (() => { const [h,m]=schForm.startTime.split(":").map(Number); const t=h*60+m+parseInt(schForm.graceMins); return `${String(Math.floor(t/60)).padStart(2,"0")}:${String(t%60).padStart(2,"0")}`; })()
-              } น.)</div>
-              <div>📋 วันลาต่อปี <span style={{color:"var(--purple)"}}>{schForm.maxLeaveDays} วัน / คน</span></div>
+            <div style={{marginTop:16,background:"var(--s2)",borderRadius:10,padding:"14px 16px",fontSize:13,color:"var(--t2)",lineHeight:2,borderLeft:"3px solid var(--blue)"}}>
+              <div style={{fontWeight:600,color:"var(--tx)",marginBottom:4}}>ตัวอย่างผล</div>
+              <div>มาถึง {sf.startTime} → <span style={{color:"var(--green)"}}>ตรงเวลา ✓</span></div>
+              <div>มาถึง {addMins(sf.startTime,+sf.graceMins+1)} → <span style={{color:"var(--yellow)"}}>มาสาย {+sf.graceMins+1} นาที ⚡</span></div>
+              <div>ออก {sf.endTime} → <span style={{color:"var(--green)"}}>ครบเวลา ✓</span></div>
             </div>
 
-            <button onClick={saveSchedule} disabled={busy} style={{marginTop:20,background:"linear-gradient(135deg,#7c3aed,#a78bfa)",color:"#fff",padding:"11px 24px",fontWeight:600}}>
-              {busy?"กำลังบันทึก...":"บันทึกตารางงาน →"}
-            </button>
+            <button onClick={saveSch} disabled={busy} style={{marginTop:16,background:"var(--blue)",color:"#fff",padding:"11px 24px",fontWeight:600}}>บันทึกตารางงาน</button>
           </div>
         </div>
       )}
