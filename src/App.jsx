@@ -370,14 +370,28 @@ export default function App() {
 
 // ─── Login ────────────────────────────────────────────────────────────────────
 function Login({employees,err,clinic,onLogin,onRetry}){
-  const[id,setId]=useState("");const[pin,setPin]=useState("");
+  const SK = "tanavet_last_id";
+  const[id,setId]=useState(()=>{ try{ return localStorage.getItem(SK)||""; }catch{return "";} });
+  const[pin,setPin]=useState("");
   const[error,setError]=useState("");const[shake,setShake]=useState(false);
   const[now,setNow]=useState(new Date());
-  useEffect(()=>{ const t=setInterval(()=>setNow(new Date()),1000); return()=>clearInterval(t); },[]);
+  const pinRef = useRef(null);
+  useEffect(()=>{
+    if(id && pinRef.current) setTimeout(()=>pinRef.current?.focus(),100);
+    const t=setInterval(()=>setNow(new Date()),1000);
+    return()=>clearInterval(t);
+  },[]);
+  const handleId=(v)=>{ setId(v); try{ localStorage.setItem(SK,v.toUpperCase()); }catch{} };
   const go=()=>{
-    const u=employees.find(e=>e.id===id.trim().toUpperCase()&&String(e.pin)===String(pin));
-    if(u) onLogin(u);
-    else{ setError("รหัสพนักงานหรือ PIN ไม่ถูกต้อง"); setShake(true); setTimeout(()=>setShake(false),500); }
+    const uid=id.trim().toUpperCase();
+    const u=employees.find(e=>e.id===uid&&String(e.pin)===String(pin));
+    if(u){ try{ localStorage.setItem(SK,uid); }catch{} onLogin(u); }
+    else{
+      setError("รหัสพนักงานหรือ PIN ไม่ถูกต้อง");
+      setPin(""); // ล้าง PIN แต่คง ID
+      setShake(true); setTimeout(()=>setShake(false),500);
+      setTimeout(()=>pinRef.current?.focus(),100);
+    }
   };
   return(
     <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
@@ -398,11 +412,11 @@ function Login({employees,err,clinic,onLogin,onRetry}){
           </div>}
           <div style={{marginBottom:12}}>
             <label className="lbl">รหัสพนักงาน</label>
-            <input placeholder="เช่น MAX01" value={id} onChange={e=>setId(e.target.value)} onKeyDown={e=>e.key==="Enter"&&go()} style={{textTransform:"uppercase",fontSize:15,letterSpacing:1}}/>
+            <input placeholder="เช่น MAX01" value={id} onChange={e=>handleId(e.target.value)} onKeyDown={e=>e.key==="Enter"&&pinRef.current?.focus()} style={{textTransform:"uppercase",fontSize:15,letterSpacing:1}} autoComplete="username"/>
           </div>
           <div style={{marginBottom:18}}>
             <label className="lbl">รหัส PIN</label>
-            <input type="password" placeholder="• • • •" value={pin} onChange={e=>setPin(e.target.value)} onKeyDown={e=>e.key==="Enter"&&go()} style={{fontSize:20,letterSpacing:6}}/>
+            <input ref={pinRef} type="password" placeholder="• • • •" value={pin} onChange={e=>setPin(e.target.value)} onKeyDown={e=>e.key==="Enter"&&go()} style={{fontSize:20,letterSpacing:6}} autoComplete="current-password"/>
           </div>
           {error&&<div style={{background:"var(--redBg)",border:"1px solid var(--red)50",borderRadius:9,padding:"10px 14px",marginBottom:14,fontSize:13,color:"var(--red)"}}>✗ {error}</div>}
           <button onClick={go} style={{width:"100%",padding:13,background:"linear-gradient(135deg,var(--acc),var(--acc2))",color:"#fff",fontWeight:700,fontSize:15,borderRadius:12,boxShadow:"0 4px 20px var(--accBg)",letterSpacing:.5}}>
