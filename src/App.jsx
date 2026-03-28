@@ -438,6 +438,8 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
   // ✅ Key fix: local session overrides — never lost on server reload
   const[localCI,setLocalCI]=useState(null);   // ISO string of local check-in this session
   const[localCO,setLocalCO]=useState(null);   // ISO string of local check-out
+  const[localBS,setLocalBS]=useState(null);   // break start
+  const[localBE,setLocalBE]=useState(null);   // break end
   const[busy,setBusy]=useState(false);
   const[lf,setLf]=useState({type:"sick",start:today(),end:today(),reason:""});
   const[now,setNow]=useState(new Date());
@@ -454,8 +456,10 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
   // Merge server record with local session state
   const effectiveRec = {
     ...(todRec||{}),
-    checkIn:  localCI || todRec?.checkIn  || null,
-    checkOut: localCO || todRec?.checkOut || null,
+    checkIn:    localCI || todRec?.checkIn    || null,
+    checkOut:   localCO || todRec?.checkOut   || null,
+    breakStart: localBS || todRec?.breakStart || null,
+    breakEnd:   localBE || todRec?.breakEnd   || null,
   };
   const st = STATUS(effectiveRec, s, now);
 
@@ -521,6 +525,26 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
     setBusy(false);
   };
 
+  const doBreakStart = async () => {
+    if(gps!=="ok"||busy||effectiveRec.breakStart||!effectiveRec.checkIn||effectiveRec.checkOut) return;
+    setBusy(true);
+    const time = nowISO();
+    setLocalBS(time);
+    const r = await call("breakStart",{date:today(),empId:user.id,time,lat:gd.lat,lng:gd.lng});
+    if(r.success){ showToast(true,"เริ่มพักแล้ว ☕ "+ft(time)); setTimeout(()=>onReloadRec(),4000); }
+    else { setLocalBS(null); showToast(false,r.message||"ผิดพลาด"); }
+    setBusy(false);
+  };
+  const doBreakEnd = async () => {
+    if(gps!=="ok"||busy||effectiveRec.breakEnd||!effectiveRec.breakStart) return;
+    setBusy(true);
+    const time = nowISO();
+    setLocalBE(time);
+    const r = await call("breakEnd",{date:today(),empId:user.id,time,lat:gd.lat,lng:gd.lng});
+    if(r.success){ showToast(true,"กลับมาแล้ว ✓ "+ft(time)); setTimeout(()=>onReloadRec(),4000); }
+    else { setLocalBE(null); showToast(false,r.message||"ผิดพลาด"); }
+    setBusy(false);
+  };
   const doLeave = async () => {
     if(!lf.reason.trim()){ showToast(false,"กรุณาระบุเหตุผล"); return; }
     if(leaveLeft<=0){ showToast(false,"วันลาไม่เพียงพอ"); return; }
@@ -548,8 +572,14 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
   const gCol={idle:"var(--tx3)",checking:"var(--yellow)",ok:"var(--acc)",err:"var(--red)",far:"var(--red)"}[gps];
   const hasCI    = !!(localCI || effectiveRec.checkIn);
   const hasCO    = !!(localCO || effectiveRec.checkOut);
+  const hasBS    = !!(localBS || effectiveRec.breakStart);
+  const hasBE    = !!(localBE || effectiveRec.breakEnd);
   const canIn    = gps==="ok" && !hasCI && !effectiveRec.leaveType && !busy;
-  const canOut   = gps==="ok" && hasCI  && !hasCO && !busy;
+  const canOut   = gps==="ok" && hasCI  && !hasCO && !hasBS && !busy;  // ออกไม่ได้ตอนพัก
+  const canBreakStart = gps==="ok" && hasCI && !hasCO && !hasBS && !busy;
+  const canBreakEnd   = gps==="ok" && hasBS && !hasBE && !busy;
+  const breakMins = dm(localBS||effectiveRec.breakStart, localBE||effectiveRec.breakEnd);
+  const workMinsNet = (()=>{ const total=dm(effectiveRec.checkIn,effectiveRec.checkOut); if(!total) return null; return total-(breakMins||0); })();
   const wsArr    = s ? Object.entries(typeof me.weekSchedule==="object"?me.weekSchedule||{}:{}) : [];
 
   return(
@@ -583,6 +613,8 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
           </span>}
           {hasCI&&<span className="pill" style={{background:"var(--accBg)",color:"var(--acc)",border:"1px solid var(--acc)40"}}>▶ {ft(localCI||effectiveRec.checkIn)}</span>}
           {hasCO&&<span className="pill" style={{background:"var(--redBg)",color:"var(--red)",border:"1px solid var(--red)40"}}>■ {ft(localCO||effectiveRec.checkOut)}</span>}
+          {hasBS&&!hasBE&&<span className="pill" style={{background:"var(--yellowBg)",color:"var(--yellow)",border:"1px solid var(--yellow)40",animation:"pulse 2s infinite"}}>☕ พักแล้ว {ft(localBS||effectiveRec.breakStart)}</span>}
+          {hasBE&&<span className="pill" style={{background:"var(--card2)",color:"var(--tx2)",border:"1px solid var(--br)"}}>☕ พัก {hm(breakMins)}</span>}
           {todRec?.leaveStatus&&<span className="pill" style={{background:{pending:"var(--yellowBg)",approved:"var(--accBg)",rejected:"var(--redBg)"}[todRec.leaveStatus],color:{pending:"var(--yellow)",approved:"var(--acc)",rejected:"var(--red)"}[todRec.leaveStatus]}}>{todRec.leaveStatus==="pending"?"⏳ รออนุมัติ":todRec.leaveStatus==="approved"?"✓ อนุมัติ":"✗ ไม่อนุมัติ"}</span>}
         </div>
         {/* Schedule info */}
@@ -648,6 +680,21 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
               </button>
             ))}
           </div>
+          {/* Break button */}
+          {hasCI&&!hasCO&&(
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+              <button onClick={doBreakStart} disabled={!canBreakStart} style={{padding:"14px 12px",borderRadius:14,textAlign:"center",background:canBreakStart?"var(--yellowBg)":"var(--card2)",color:canBreakStart?"var(--yellow)":"var(--tx3)",border:`1.5px solid ${canBreakStart?"var(--yellow)":"var(--br)"}`,opacity:hasBS&&!canBreakStart?.55:1,transition:"all .2s"}}>
+                <div style={{fontSize:18,marginBottom:4}}>☕</div>
+                <div style={{fontWeight:700,fontSize:13}}>เริ่มพัก</div>
+                {hasBS&&<div className="mono" style={{fontSize:11,marginTop:3,opacity:.7}}>{ft(localBS||effectiveRec.breakStart)}</div>}
+              </button>
+              <button onClick={doBreakEnd} disabled={!canBreakEnd} style={{padding:"14px 12px",borderRadius:14,textAlign:"center",background:canBreakEnd?"rgba(134,239,172,.15)":"var(--card2)",color:canBreakEnd?"#16a34a":"var(--tx3)",border:`1.5px solid ${canBreakEnd?"#16a34a":"var(--br)"}`,opacity:hasBE&&!canBreakEnd?.55:1,transition:"all .2s"}}>
+                <div style={{fontSize:18,marginBottom:4}}>🔙</div>
+                <div style={{fontWeight:700,fontSize:13}}>กลับมาแล้ว</div>
+                {hasBE&&<div className="mono" style={{fontSize:11,marginTop:3,opacity:.7}}>{ft(localBE||effectiveRec.breakEnd)}</div>}
+              </button>
+            </div>
+          )}
 
           {!s&&<div style={{background:"var(--yellowBg)",border:"1px solid var(--yellow)50",borderRadius:10,padding:"10px 14px",marginBottom:10,fontSize:12,color:"var(--yellow)",textAlign:"center"}}>📅 วันนี้ไม่มีตารางงาน — ตรวจสอบกับ Admin</div>}
           {gps==="idle"&&<div style={{textAlign:"center",fontSize:12,color:"var(--tx3)",marginTop:10}}>กดตรวจสอบพิกัดก่อนเช็คอิน/เอาท์</div>}
@@ -668,13 +715,14 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
           {myRecs.length===0?<div className="card2" style={{padding:50,textAlign:"center",color:"var(--tx3)",fontSize:14}}>📋 ยังไม่มีประวัติ</div>
           :<div className="card" style={{overflow:"hidden"}}>
             <table>
-              <thead><tr><th>วันที่</th><th>เข้า</th><th>ออก</th><th>รวม</th><th>สถานะ</th></tr></thead>
-              <tbody>{myRecs.map(r=>{ const s3=getScheduleForDate(r.date,me,gSch);const st2=STATUS(r,s3); return(
+              <thead><tr><th>วันที่</th><th>เข้า</th><th>ออก</th><th>พัก</th><th>สุทธิ</th><th>สถานะ</th></tr></thead>
+              <tbody>{myRecs.map(r=>{ const s3=getScheduleForDate(r.date,me,gSch);const st2=STATUS(r,s3);const bm=dm(r.breakStart,r.breakEnd);const total=dm(r.checkIn,r.checkOut);const net=total!=null?total-(bm||0):null; return(
                 <tr key={r.date}>
                   <td style={{fontSize:11,color:"var(--tx2)"}}>{fd(r.date)}</td>
                   <td className="mono" style={{color:"var(--acc)",fontSize:12}}>{ft(r.checkIn)}</td>
                   <td className="mono" style={{color:r.checkOut?"var(--red)":"var(--tx3)",fontSize:12}}>{ft(r.checkOut)}</td>
-                  <td className="mono" style={{color:"var(--acc2)",fontSize:12}}>{hm(dm(r.checkIn,r.checkOut))}</td>
+                  <td className="mono" style={{color:"var(--yellow)",fontSize:11}}>{bm!=null?hm(bm):"—"}</td>
+                  <td className="mono" style={{color:"var(--acc2)",fontSize:12}}>{hm(net)}</td>
                   <td><span className="pill" style={{background:st2.bg,color:st2.c,fontSize:9}}>{st2.l}</span></td>
                 </tr>
               );})}</tbody>
@@ -816,6 +864,12 @@ function AdminPanel({user,employees,records,location,gSch,clinic,onReloadAll,onR
   useEffect(()=>{ if(clinic)setCf({name:clinic.name||"",address:clinic.address||"",phone:clinic.phone||""}); },[clinic]);
 
   const save=async(key,data)=>{ setBusy(true);const r=await call("saveConfig",{configKey:key,data:JSON.stringify(data)});r.success?(await onReloadAll(),showToast(true,"บันทึกสำเร็จ")):showToast(false,r.message);setBusy(false); };
+  const doDeleteRecord=async(date,empId)=>{
+    setBusy(true);
+    const r=await call("deleteRecord",{date,empId});
+    r.success?(await onReloadRec(),showToast(true,"ลบบันทึกแล้ว")):showToast(false,r.message);
+    setBusy(false);
+  };
   const addEmp=async()=>{
     if(!newEmp.id||!newEmp.name||!newEmp.pin)return showToast(false,"กรอก รหัส/ชื่อ/PIN ให้ครบ");
     if(employees.find(e=>e.id===newEmp.id.toUpperCase()))return showToast(false,"รหัสนี้มีอยู่แล้ว");
@@ -892,15 +946,16 @@ function AdminPanel({user,employees,records,location,gSch,clinic,onReloadAll,onR
           </div>
           <div className="card" style={{overflow:"hidden"}}>
             <table>
-              <thead><tr><th>พนักงาน</th><th>ตำแหน่ง</th><th>เข้า</th><th>ออก</th><th>รวม</th><th>สถานะ</th></tr></thead>
-              <tbody>{filtered.map(e=>{ const r=dayRecs[e.id];const s2=getScheduleForDate(date,e,gSch);const st=STATUS(r,s2); return(
+              <thead><tr><th>พนักงาน</th><th>เข้า</th><th>ออก</th><th>พัก</th><th>สุทธิ</th><th>สถานะ</th><th></th></tr></thead>
+              <tbody>{filtered.map(e=>{ const r=dayRecs[e.id];const s2=getScheduleForDate(date,e,gSch);const st=STATUS(r,s2);const bm=dm(r?.breakStart,r?.breakEnd);const total=dm(r?.checkIn,r?.checkOut);const net=total!=null?total-(bm||0):null; return(
                 <tr key={e.id} onClick={()=>setSelEmp(e)} style={{cursor:"pointer"}}>
                   <td><div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:18}}>{e.avatar||"🐾"}</span><div><div style={{fontWeight:600,fontSize:13,color:"var(--tx)"}}>{e.name}</div><div style={{fontSize:10,color:"var(--tx3)"}}>{e.id}</div></div></div></td>
-                  <td style={{fontSize:11,color:"var(--tx2)"}}>{e.position||"—"}</td>
                   <td className="mono" style={{color:r?.checkIn?"var(--acc)":"var(--tx3)",fontSize:12}}>{ft(r?.checkIn)}</td>
                   <td className="mono" style={{color:r?.checkOut?"var(--red)":"var(--tx3)",fontSize:12}}>{ft(r?.checkOut)}</td>
-                  <td className="mono" style={{color:"var(--acc2)",fontSize:12}}>{r?hm(dm(r.checkIn,r.checkOut)):"—"}</td>
+                  <td className="mono" style={{color:"var(--yellow)",fontSize:11}}>{bm!=null?hm(bm):"—"}</td>
+                  <td className="mono" style={{color:"var(--acc2)",fontSize:12}}>{hm(net)}</td>
                   <td>{!st.isOff&&<span className="pill" style={{background:st.bg,color:st.c,fontSize:9}}>{st.l}</span>}{st.isOff&&<span style={{fontSize:10,color:"var(--tx3)"}}>วันหยุด</span>}</td>
+                  <td onClick={ev=>{ev.stopPropagation();if(r&&window.confirm(`ลบบันทึกวันที่ ${date} ของ ${e.name}?`)) doDeleteRecord(date,e.id);}} style={{width:40}}>{r&&<button style={{background:"var(--redBg)",color:"var(--red)",border:"none",padding:"3px 8px",fontSize:11,borderRadius:7}}>ลบ</button>}</td>
                 </tr>
               );})}</tbody>
             </table>
