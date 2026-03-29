@@ -28,6 +28,16 @@ const addMin = (t,n) => { const[h,m]=t.split(":").map(Number),x=h*60+m+n;return`
 const timeToMins = t => { if(!t)return 0;const[h,m]=t.split(":").map(Number);return h*60+m; };
 const DAYS_TH = ["อา","จ","อ","พ","พฤ","ศ","ส"];
 
+// Break status pill data
+const breakStatus = (bm, limitMins) => {
+  if (bm == null) return null;
+  const limit = limitMins ?? 60;
+  const over  = bm - limit;
+  if (over > 0)  return { l:`พักเกิน ${over}น.`, c:"var(--red)",    bg:"var(--redBg)" };
+  if (over === 0) return { l:`พักครบ ${hm(bm)}`, c:"var(--acc)",    bg:"var(--accBg)" };
+  return             { l:`พัก ${hm(bm)}`,         c:"var(--yellow)", bg:"var(--yellowBg)" };
+};
+
 // ─── Per-day-of-week schedule ────────────────────────────────────────────────
 // weekSchedule: { "1":{"s":"08:00","e":"17:00"}, ... } null = off
 // Returns null if day off, or {startTime, endTime, graceMins, maxLeaveDays}
@@ -41,8 +51,9 @@ const getScheduleForDate = (dateStr, emp, gSch) => {
     if (day && day.s && day.e) {
       return {
         startTime: day.s, endTime: day.e,
-        graceMins:    emp?.graceMins    != null ? +emp.graceMins    : (gSch?.graceMins    ?? 15),
-        maxLeaveDays: emp?.maxLeaveDays != null ? +emp.maxLeaveDays : (gSch?.maxLeaveDays ?? 10),
+        graceMins:      emp?.graceMins      != null ? +emp.graceMins      : (gSch?.graceMins      ?? 15),
+        maxLeaveDays:   emp?.maxLeaveDays   != null ? +emp.maxLeaveDays   : (gSch?.maxLeaveDays   ?? 10),
+        breakLimitMins: emp?.breakLimitMins != null ? +emp.breakLimitMins : (gSch?.breakLimitMins ?? 60),
       };
     }
   }
@@ -52,8 +63,9 @@ const getScheduleForDate = (dateStr, emp, gSch) => {
   return {
     startTime:    emp?.workStart    || gSch?.startTime    || "08:30",
     endTime:      emp?.workEnd      || gSch?.endTime      || "17:30",
-    graceMins:    emp?.graceMins    != null ? +emp.graceMins    : (gSch?.graceMins    ?? 15),
-    maxLeaveDays: emp?.maxLeaveDays != null ? +emp.maxLeaveDays : (gSch?.maxLeaveDays ?? 10),
+    graceMins:      emp?.graceMins      != null ? +emp.graceMins      : (gSch?.graceMins      ?? 15),
+    maxLeaveDays:   emp?.maxLeaveDays   != null ? +emp.maxLeaveDays   : (gSch?.maxLeaveDays   ?? 10),
+    breakLimitMins: emp?.breakLimitMins != null ? +emp.breakLimitMins : (gSch?.breakLimitMins ?? 60),
   };
 };
 
@@ -580,8 +592,8 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
     setBusy(false);
   };
   const exportCSV=()=>{
-    const rows=[["วันที่","เข้างาน","ออกงาน","รวม","สถานะ"]];
-    myRecs.forEach(r=>{ const s3=getScheduleForDate(r.date,me,gSch);const st3=STATUS(r,s3); rows.push([r.date,ft(r.checkIn),ft(r.checkOut),hm(dm(r.checkIn,r.checkOut)),st3.l]); });
+    const rows=[["วันที่","เข้างาน","ออกงาน","เริ่มพัก","กลับจากพัก","พัก(น.)","สถานะพัก","ชม.สุทธิ","สถานะงาน"]];
+    myRecs.forEach(r=>{ const s3=getScheduleForDate(r.date,me,gSch);const st3=STATUS(r,s3);const bm=dm(r.breakStart,r.breakEnd);const total=dm(r.checkIn,r.checkOut);const net=total!=null?total-(bm||0):null;const bs=breakStatus(bm,s3?.breakLimitMins); rows.push([r.date,ft(r.checkIn),ft(r.checkOut),ft(r.breakStart),ft(r.breakEnd),bm!=null?bm:"",bs?bs.l:"",hm(net),st3.l]); });
     const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["\uFEFF"+rows.map(x=>x.join(",")).join("\n")],{type:"text/csv;charset=utf-8;"}));a.download=`att_${user.id}_${today()}.csv`;a.click();
   };
 
@@ -630,8 +642,19 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
           </span>}
           {hasCI&&<span className="pill" style={{background:"var(--accBg)",color:"var(--acc)",border:"1px solid var(--acc)40"}}>▶ {ft(localCI||effectiveRec.checkIn)}</span>}
           {hasCO&&<span className="pill" style={{background:"var(--redBg)",color:"var(--red)",border:"1px solid var(--red)40"}}>■ {ft(localCO||effectiveRec.checkOut)}</span>}
-          {hasBS&&!hasBE&&<span className="pill" style={{background:"var(--yellowBg)",color:"var(--yellow)",border:"1px solid var(--yellow)40",animation:"pulse 2s infinite"}}>☕ พักแล้ว {ft(localBS||effectiveRec.breakStart)}</span>}
-          {hasBE&&<span className="pill" style={{background:"var(--card2)",color:"var(--tx2)",border:"1px solid var(--br)"}}>☕ พัก {hm(dm(effectiveRec.breakStart,effectiveRec.breakEnd))}</span>}
+          {hasBS&&!hasBE&&(()=>{
+            const liveMins=dm(localBS||effectiveRec.breakStart,now.toISOString());
+            const limit=s?.breakLimitMins??60;
+            const over=liveMins!=null&&liveMins>limit;
+            return <span className="pill" style={{background:over?"var(--redBg)":"var(--yellowBg)",color:over?"var(--red)":"var(--yellow)",border:`1px solid ${over?"var(--red)":"var(--yellow)"}40`,animation:"pulse 2s infinite"}}>
+              {over?"🔴":"☕"} พักอยู่ {liveMins!=null?hm(liveMins):""}{over?` (เกิน ${liveMins-limit}น.)`:""}
+            </span>;
+          })()}
+          {hasBE&&(()=>{
+            const bm2=dm(effectiveRec.breakStart,effectiveRec.breakEnd);
+            const bs2=breakStatus(bm2,s?.breakLimitMins);
+            return bs2?<span className="pill" style={{background:bs2.bg,color:bs2.c}}>☕ {bs2.l}</span>:null;
+          })()}
           {todRec?.leaveStatus&&<span className="pill" style={{background:{pending:"var(--yellowBg)",approved:"var(--accBg)",rejected:"var(--redBg)"}[todRec.leaveStatus],color:{pending:"var(--yellow)",approved:"var(--acc)",rejected:"var(--red)"}[todRec.leaveStatus]}}>{todRec.leaveStatus==="pending"?"⏳ รออนุมัติ":todRec.leaveStatus==="approved"?"✓ อนุมัติ":"✗ ไม่อนุมัติ"}</span>}
         </div>
         {/* Schedule info */}
@@ -639,6 +662,7 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
           <div style={{marginTop:12,padding:"8px 14px",background:"var(--card2)",borderRadius:10,display:"flex",flexWrap:"wrap",gap:12,justifyContent:"center",fontSize:11,color:"var(--tx2)"}}>
             <span>🕐 {s.startTime}–{s.endTime}</span>
             <span>⏱ ผ่อนผัน {s.graceMins}น.</span>
+            <span>☕ พักได้ {s.breakLimitMins??60}น.</span>
             {location?.name&&<span>📍 {location.name}</span>}
           </div>
         ) : (
@@ -733,12 +757,15 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
           :<div className="card" style={{overflow:"hidden"}}>
             <table>
               <thead><tr><th>วันที่</th><th>เข้า</th><th>ออก</th><th>พัก</th><th>สุทธิ</th><th>สถานะ</th></tr></thead>
-              <tbody>{myRecs.map(r=>{ const s3=getScheduleForDate(r.date,me,gSch);const st2=STATUS(r,s3);const bm=dm(r.breakStart,r.breakEnd);const total=dm(r.checkIn,r.checkOut);const net=total!=null?total-(bm||0):null; return(
+              <tbody>{myRecs.map(r=>{ const s3=getScheduleForDate(r.date,me,gSch);const st2=STATUS(r,s3);const bm=dm(r.breakStart,r.breakEnd);const total=dm(r.checkIn,r.checkOut);const net=total!=null?total-(bm||0):null;const bs=breakStatus(bm,s3?.breakLimitMins); return(
                 <tr key={r.date}>
                   <td style={{fontSize:11,color:"var(--tx2)"}}>{fd(r.date)}</td>
                   <td className="mono" style={{color:"var(--acc)",fontSize:12}}>{ft(r.checkIn)}</td>
                   <td className="mono" style={{color:r.checkOut?"var(--red)":"var(--tx3)",fontSize:12}}>{ft(r.checkOut)}</td>
-                  <td className="mono" style={{color:"var(--yellow)",fontSize:11}}>{bm!=null?hm(bm):"—"}</td>
+                  <td style={{fontSize:11}}>
+                    {bs?<span className="pill" style={{background:bs.bg,color:bs.c,fontSize:9}}>☕ {bs.l}</span>:<span style={{color:"var(--tx3)"}}>—</span>}
+                    {r.breakStart&&<div className="mono" style={{fontSize:9,color:"var(--tx3)",marginTop:2}}>{ft(r.breakStart)}–{ft(r.breakEnd)||"..."}</div>}
+                  </td>
                   <td className="mono" style={{color:"var(--acc2)",fontSize:12}}>{hm(net)}</td>
                   <td><span className="pill" style={{background:st2.bg,color:st2.c,fontSize:9}}>{st2.l}</span></td>
                 </tr>
@@ -836,6 +863,7 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
               <div style={{fontSize:13,color:"var(--tx2)",lineHeight:2}}>
                 <div>🕐 {gSch?.startTime||"08:30"}–{gSch?.endTime||"17:30"}</div>
                 <div>⏱ ผ่อนผัน {gSch?.graceMins||15} น.</div>
+                <div>☕ พักได้ {gSch?.breakLimitMins||60} น./วัน</div>
                 <div>📋 วันลา {gSch?.maxLeaveDays||10} วัน/ปี</div>
                 <div style={{fontSize:11,color:"var(--tx3)",marginTop:4}}>* ใช้ตารางงาน Default (ติดต่อ Admin เพื่อตั้งค่าส่วนตัว)</div>
               </div>
@@ -873,11 +901,11 @@ function AdminPanel({user,employees,records,location,gSch,clinic,onReloadAll,onR
   const[busy,setBusy]=useState(false);
   const[newEmp,setNewEmp]=useState({id:"",name:"",pin:"",position:"",department:"",salary:"",email:"",phone:"",startDate:"",role:"employee"});
   const[lf,setLf]=useState({name:"",lat:"",lng:"",radius:200});
-  const[sf,setSf]=useState({startTime:"08:30",endTime:"17:30",graceMins:15,workDays:"1,2,3,4,5",maxLeaveDays:10});
+  const[sf,setSf]=useState({startTime:"08:30",endTime:"17:30",graceMins:15,workDays:"1,2,3,4,5",maxLeaveDays:10,breakLimitMins:60});
   const[cf,setCf]=useState({name:"คลินิคท่านาสัตวแพทย์",address:"",phone:""});
 
   useEffect(()=>{ if(location)setLf({name:location.name||"",lat:location.lat||"",lng:location.lng||"",radius:location.radius||200}); },[location]);
-  useEffect(()=>{ if(gSch)setSf({startTime:gSch.startTime||"08:30",endTime:gSch.endTime||"17:30",graceMins:gSch.graceMins??15,workDays:gSch.workDays||"1,2,3,4,5",maxLeaveDays:gSch.maxLeaveDays??10}); },[gSch]);
+  useEffect(()=>{ if(gSch)setSf({startTime:gSch.startTime||"08:30",endTime:gSch.endTime||"17:30",graceMins:gSch.graceMins??15,workDays:gSch.workDays||"1,2,3,4,5",maxLeaveDays:gSch.maxLeaveDays??10,breakLimitMins:gSch.breakLimitMins??60}); },[gSch]);
   useEffect(()=>{ if(clinic)setCf({name:clinic.name||"",address:clinic.address||"",phone:clinic.phone||""}); },[clinic]);
 
   const save=async(key,data)=>{ setBusy(true);const r=await call("saveConfig",{configKey:key,data:JSON.stringify(data)});r.success?(await onReloadAll(),showToast(true,"บันทึกสำเร็จ")):showToast(false,r.message);setBusy(false); };
@@ -964,12 +992,14 @@ function AdminPanel({user,employees,records,location,gSch,clinic,onReloadAll,onR
           <div className="card" style={{overflow:"hidden"}}>
             <table>
               <thead><tr><th>พนักงาน</th><th>เข้า</th><th>ออก</th><th>พัก</th><th>สุทธิ</th><th>สถานะ</th><th></th></tr></thead>
-              <tbody>{filtered.map(e=>{ const r=dayRecs[e.id];const s2=getScheduleForDate(date,e,gSch);const st=STATUS(r,s2);const bm=dm(r?.breakStart,r?.breakEnd);const total=dm(r?.checkIn,r?.checkOut);const net=total!=null?total-(bm||0):null; return(
+              <tbody>{filtered.map(e=>{ const r=dayRecs[e.id];const s2=getScheduleForDate(date,e,gSch);const st=STATUS(r,s2);const bm=dm(r?.breakStart,r?.breakEnd);const total=dm(r?.checkIn,r?.checkOut);const net=total!=null?total-(bm||0):null;const bs=breakStatus(bm,s2?.breakLimitMins); return(
                 <tr key={e.id} onClick={()=>setSelEmp(e)} style={{cursor:"pointer"}}>
                   <td><div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:18}}>{e.avatar||"🐾"}</span><div><div style={{fontWeight:600,fontSize:13,color:"var(--tx)"}}>{e.name}</div><div style={{fontSize:10,color:"var(--tx3)"}}>{e.id}</div></div></div></td>
                   <td className="mono" style={{color:r?.checkIn?"var(--acc)":"var(--tx3)",fontSize:12}}>{ft(r?.checkIn)}</td>
                   <td className="mono" style={{color:r?.checkOut?"var(--red)":"var(--tx3)",fontSize:12}}>{ft(r?.checkOut)}</td>
-                  <td className="mono" style={{color:"var(--yellow)",fontSize:11}}>{bm!=null?hm(bm):"—"}</td>
+                  <td style={{fontSize:11}}>
+                    {bs?<span className="pill" style={{background:bs.bg,color:bs.c,fontSize:9}}>☕ {bs.l}</span>:<span style={{color:"var(--tx3)"}}>—</span>}
+                  </td>
                   <td className="mono" style={{color:"var(--acc2)",fontSize:12}}>{hm(net)}</td>
                   <td>{!st.isOff&&<span className="pill" style={{background:st.bg,color:st.c,fontSize:9}}>{st.l}</span>}{st.isOff&&<span style={{fontSize:10,color:"var(--tx3)"}}>วันหยุด</span>}</td>
                   <td onClick={ev=>{ev.stopPropagation();if(r&&window.confirm(`ลบบันทึกวันที่ ${date} ของ ${e.name}?`)) doDeleteRecord(date,e.id);}} style={{width:40}}>{r&&<button style={{background:"var(--redBg)",color:"var(--red)",border:"none",padding:"3px 8px",fontSize:11,borderRadius:7}}>ลบ</button>}</td>
@@ -1121,6 +1151,7 @@ function AdminPanel({user,employees,records,location,gSch,clinic,onReloadAll,onR
                 <div><label className="lbl">เวลาออกงาน</label><input type="time" value={sf.endTime} onChange={e=>setSf({...sf,endTime:e.target.value})}/></div>
               </div>
               <div><label className="lbl">ผ่อนผันมาสาย: <strong>{sf.graceMins} น.</strong></label><input type="range" min="0" max="60" step="5" value={sf.graceMins} onChange={e=>setSf({...sf,graceMins:+e.target.value})}/></div>
+              <div><label className="lbl">เวลาพักสูงสุด: <strong style={{color:"var(--yellow)"}}>{sf.breakLimitMins} น.</strong></label><input type="range" min="15" max="120" step="5" value={sf.breakLimitMins} onChange={e=>setSf({...sf,breakLimitMins:+e.target.value})}/></div>
               <div><label className="lbl">วันลาสูงสุด/ปี: <strong>{sf.maxLeaveDays} วัน</strong></label><input type="range" min="1" max="30" step="1" value={sf.maxLeaveDays} onChange={e=>setSf({...sf,maxLeaveDays:+e.target.value})}/></div>
               <div>
                 <label className="lbl">วันทำงาน</label>
@@ -1135,8 +1166,10 @@ function AdminPanel({user,employees,records,location,gSch,clinic,onReloadAll,onR
               <div style={{color:"var(--acc)",fontWeight:700,fontSize:10,letterSpacing:2,marginBottom:4}}>PREVIEW</div>
               <div>มาถึง {sf.startTime} → <b style={{color:"var(--acc)"}}>ตรงเวลา ✓</b></div>
               <div>มาถึง {addMin(sf.startTime,+sf.graceMins+1)} → <b style={{color:"var(--yellow)"}}>มาสาย {+sf.graceMins+1} นาที</b></div>
+              <div>พัก {sf.breakLimitMins} น. → <b style={{color:"var(--yellow)"}}>พักครบ ✓</b></div>
+              <div>พัก {+sf.breakLimitMins+1} น. → <b style={{color:"var(--red)"}}>พักเกิน 1 นาที ⚠</b></div>
             </div>
-            <button onClick={()=>save("schedule",{startTime:sf.startTime,endTime:sf.endTime,graceMins:sf.graceMins,workDays:sf.workDays,maxLeaveDays:sf.maxLeaveDays})} disabled={busy} style={{marginTop:16,background:"linear-gradient(135deg,var(--acc),var(--acc2))",color:"#fff",padding:"11px 24px",fontWeight:700,borderRadius:10}}>{busy?"กำลังบันทึก...":"บันทึกตารางงาน"}</button>
+            <button onClick={()=>save("schedule",{startTime:sf.startTime,endTime:sf.endTime,graceMins:sf.graceMins,workDays:sf.workDays,maxLeaveDays:sf.maxLeaveDays,breakLimitMins:sf.breakLimitMins})} disabled={busy} style={{marginTop:16,background:"linear-gradient(135deg,var(--acc),var(--acc2))",color:"#fff",padding:"11px 24px",fontWeight:700,borderRadius:10}}>{busy?"กำลังบันทึก...":"บันทึกตารางงาน"}</button>
           </div>
         </div>
       )}
