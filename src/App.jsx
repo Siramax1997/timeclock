@@ -451,6 +451,16 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
   const me = empList.find(e=>e.id===user.id)||user;
   useEffect(()=>{ setPf({email:me.email||"",phone:me.phone||"",note:me.note||"",avatar:me.avatar||"🐾"}); },[me.id]);
 
+  // Sync break state from server on mount / when records update
+  useEffect(()=>{
+    const tr = records[today()]?.[user.id];
+    if(tr?.breakStart && !localBS) setLocalBS(tr.breakStart);
+    if(tr?.breakEnd   && !localBE) setLocalBE(tr.breakEnd);
+    // Also sync checkIn/checkOut to avoid stale state after re-login
+    if(tr?.checkIn  && !localCI) setLocalCI(tr.checkIn);
+    if(tr?.checkOut && !localCO) setLocalCO(tr.checkOut);
+  },[records, user.id]);
+
   const s = getTodaySchedule(me, gSch);
   const todRec = records[today()]?.[user.id];
   // Merge server record with local session state
@@ -531,8 +541,11 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
     const time = nowISO();
     setLocalBS(time);
     const r = await call("breakStart",{date:today(),empId:user.id,time,lat:gd.lat,lng:gd.lng});
-    if(r.success){ showToast(true,"เริ่มพักแล้ว ☕ "+ft(time)); setTimeout(()=>onReloadRec(),4000); }
-    else { setLocalBS(null); showToast(false,r.message||"ผิดพลาด"); }
+    if(r.success){
+      if(r.alreadyStarted && r.breakStart) setLocalBS(r.breakStart);
+      showToast(true,"เริ่มพักแล้ว ☕ "+ft(time));
+      setTimeout(()=>onReloadRec(),4000);
+    } else { setLocalBS(null); showToast(false,r.message||"ผิดพลาด"); }
     setBusy(false);
   };
   const doBreakEnd = async () => {
@@ -541,8 +554,11 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
     const time = nowISO();
     setLocalBE(time);
     const r = await call("breakEnd",{date:today(),empId:user.id,time,lat:gd.lat,lng:gd.lng});
-    if(r.success){ showToast(true,"กลับมาแล้ว ✓ "+ft(time)); setTimeout(()=>onReloadRec(),4000); }
-    else { setLocalBE(null); showToast(false,r.message||"ผิดพลาด"); }
+    if(r.success){
+      if(r.alreadyEnded && r.breakEnd) setLocalBE(r.breakEnd);
+      showToast(true,"กลับมาแล้ว ✓ "+ft(time));
+      setTimeout(()=>onReloadRec(),4000);
+    } else { setLocalBE(null); showToast(false,r.message||"ผิดพลาด"); }
     setBusy(false);
   };
   const doLeave = async () => {
@@ -575,9 +591,10 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
   const hasBS    = !!(localBS || effectiveRec.breakStart);
   const hasBE    = !!(localBE || effectiveRec.breakEnd);
   const canIn    = gps==="ok" && !hasCI && !effectiveRec.leaveType && !busy;
-  const canOut   = gps==="ok" && hasCI  && !hasCO && !hasBS && !busy;  // ออกไม่ได้ตอนพัก
+  const onBreak  = hasBS && !hasBE;   // กำลังพักอยู่จริงๆ
+  const canOut   = gps==="ok" && hasCI && !hasCO && !onBreak && !busy; // ออกได้ถ้าไม่ได้พักอยู่
   const canBreakStart = gps==="ok" && hasCI && !hasCO && !hasBS && !busy;
-  const canBreakEnd   = gps==="ok" && hasBS && !hasBE && !busy;
+  const canBreakEnd   = gps==="ok" && onBreak && !busy;
   const breakMins = dm(localBS||effectiveRec.breakStart, localBE||effectiveRec.breakEnd);
   const workMinsNet = (()=>{ const total=dm(effectiveRec.checkIn,effectiveRec.checkOut); if(!total) return null; return total-(breakMins||0); })();
   const wsArr    = s ? Object.entries(typeof me.weekSchedule==="object"?me.weekSchedule||{}:{}) : [];
@@ -614,7 +631,7 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
           {hasCI&&<span className="pill" style={{background:"var(--accBg)",color:"var(--acc)",border:"1px solid var(--acc)40"}}>▶ {ft(localCI||effectiveRec.checkIn)}</span>}
           {hasCO&&<span className="pill" style={{background:"var(--redBg)",color:"var(--red)",border:"1px solid var(--red)40"}}>■ {ft(localCO||effectiveRec.checkOut)}</span>}
           {hasBS&&!hasBE&&<span className="pill" style={{background:"var(--yellowBg)",color:"var(--yellow)",border:"1px solid var(--yellow)40",animation:"pulse 2s infinite"}}>☕ พักแล้ว {ft(localBS||effectiveRec.breakStart)}</span>}
-          {hasBE&&<span className="pill" style={{background:"var(--card2)",color:"var(--tx2)",border:"1px solid var(--br)"}}>☕ พัก {hm(breakMins)}</span>}
+          {hasBE&&<span className="pill" style={{background:"var(--card2)",color:"var(--tx2)",border:"1px solid var(--br)"}}>☕ พัก {hm(dm(effectiveRec.breakStart,effectiveRec.breakEnd))}</span>}
           {todRec?.leaveStatus&&<span className="pill" style={{background:{pending:"var(--yellowBg)",approved:"var(--accBg)",rejected:"var(--redBg)"}[todRec.leaveStatus],color:{pending:"var(--yellow)",approved:"var(--acc)",rejected:"var(--red)"}[todRec.leaveStatus]}}>{todRec.leaveStatus==="pending"?"⏳ รออนุมัติ":todRec.leaveStatus==="approved"?"✓ อนุมัติ":"✗ ไม่อนุมัติ"}</span>}
         </div>
         {/* Schedule info */}
@@ -670,7 +687,7 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
             {[
               {lb:"เช็คอิน",sub:"▶ เข้างาน",can:canIn,done:hasCI,time:localCI||effectiveRec.checkIn,col:"var(--acc)",bg:"var(--accBg)",fn:doIn},
-              {lb:"เช็คเอาท์",sub:"■ ออกงาน",can:canOut,done:hasCO,time:localCO||effectiveRec.checkOut,col:"var(--red)",bg:"var(--redBg)",fn:doOut},
+              {lb:"เช็คเอาท์",sub:onBreak?"⏸ กำลังพักอยู่":"■ ออกงาน",can:canOut,done:hasCO,time:localCO||effectiveRec.checkOut,col:"var(--red)",bg:"var(--redBg)",fn:doOut},
             ].map(b=>(
               <button key={b.lb} onClick={b.fn} disabled={!b.can} style={{padding:"24px 12px",borderRadius:16,textAlign:"center",background:b.can?b.bg:"var(--card2)",color:b.can?b.col:"var(--tx3)",border:`1.5px solid ${b.can?b.col:"var(--br)"}`,opacity:b.done&&!b.can?.55:1,boxShadow:b.can?`0 4px 24px ${b.bg}`:"none",transition:"all .2s"}}>
                 <div style={{fontSize:12,fontWeight:600,letterSpacing:.5,marginBottom:6,opacity:.75}}>{b.sub}</div>
