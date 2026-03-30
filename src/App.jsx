@@ -463,14 +463,23 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
   const me = empList.find(e=>e.id===user.id)||user;
   useEffect(()=>{ setPf({email:me.email||"",phone:me.phone||"",note:me.note||"",avatar:me.avatar||"🐾"}); },[me.id]);
 
-  // Sync break state from server on mount / when records update
+  // Sync from server — use ref to track initialization, avoids overwriting optimistic updates
+  const syncedFromServer = useRef(false);
   useEffect(()=>{
+    // Reset sync flag when user changes (re-login)
+    syncedFromServer.current = false;
+  },[user.id]);
+
+  useEffect(()=>{
+    if(syncedFromServer.current) return; // Already initialized this session
     const tr = records[today()]?.[user.id];
-    if(tr?.breakStart && !localBS) setLocalBS(tr.breakStart);
-    if(tr?.breakEnd   && !localBE) setLocalBE(tr.breakEnd);
-    // Also sync checkIn/checkOut to avoid stale state after re-login
-    if(tr?.checkIn  && !localCI) setLocalCI(tr.checkIn);
-    if(tr?.checkOut && !localCO) setLocalCO(tr.checkOut);
+    if(!tr) return; // Records not loaded yet — will retry on next update
+    // Sync all local state from server (only once per login session)
+    syncedFromServer.current = true;
+    if(tr.checkIn)    setLocalCI(tr.checkIn);
+    if(tr.checkOut)   setLocalCO(tr.checkOut);
+    if(tr.breakStart) setLocalBS(tr.breakStart);
+    if(tr.breakEnd)   setLocalBE(tr.breakEnd);
   },[records, user.id]);
 
   const s = getTodaySchedule(me, gSch);
@@ -482,6 +491,8 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
     checkOut:   localCO || todRec?.checkOut   || null,
     breakStart: localBS || todRec?.breakStart || null,
     breakEnd:   localBE || todRec?.breakEnd   || null,
+    leaveType:  todRec?.leaveType  || null,
+    leaveStatus:todRec?.leaveStatus|| null,
   };
   const st = STATUS(effectiveRec, s, now);
 
@@ -548,7 +559,16 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
   };
 
   const doBreakStart = async () => {
-    if(gps!=="ok"||busy||effectiveRec.breakStart||!effectiveRec.checkIn||effectiveRec.checkOut) return;
+    // Double-check with server record to prevent multiple breaks
+    const serverRec = records[today()]?.[user.id];
+    if(gps!=="ok"||busy) return;
+    if(serverRec?.breakStart || effectiveRec.breakStart) { 
+      // Already has break — sync and show proper state
+      if(serverRec?.breakStart) setLocalBS(serverRec.breakStart);
+      if(serverRec?.breakEnd)   setLocalBE(serverRec.breakEnd);
+      showToast(false,"เริ่มพักแล้ว — ใช้ปุ่ม 'กลับมาแล้ว'"); return;
+    }
+    if(!effectiveRec.checkIn||effectiveRec.checkOut) return;
     setBusy(true);
     const time = nowISO();
     setLocalBS(time);
@@ -561,7 +581,16 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
     setBusy(false);
   };
   const doBreakEnd = async () => {
-    if(gps!=="ok"||busy||effectiveRec.breakEnd||!effectiveRec.breakStart) return;
+    const serverRec2 = records[today()]?.[user.id];
+    if(gps!=="ok"||busy) return;
+    if(serverRec2?.breakEnd || effectiveRec.breakEnd) {
+      if(serverRec2?.breakEnd) setLocalBE(serverRec2.breakEnd);
+      showToast(false,"กลับจากพักแล้ว"); return;
+    }
+    // Ensure we have breakStart (from server or local)
+    const bs = localBS || serverRec2?.breakStart;
+    if(!bs) { showToast(false,"กรุณากดเริ่มพักก่อน"); return; }
+    if(!localBS && bs) setLocalBS(bs); // sync if missing
     setBusy(true);
     const time = nowISO();
     setLocalBE(time);
@@ -600,8 +629,9 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
   const gCol={idle:"var(--tx3)",checking:"var(--yellow)",ok:"var(--acc)",err:"var(--red)",far:"var(--red)"}[gps];
   const hasCI    = !!(localCI || effectiveRec.checkIn);
   const hasCO    = !!(localCO || effectiveRec.checkOut);
-  const hasBS    = !!(localBS || effectiveRec.breakStart);
-  const hasBE    = !!(localBE || effectiveRec.breakEnd);
+  const svrRec   = records[today()]?.[user.id];  // server record for today
+  const hasBS    = !!(localBS || effectiveRec.breakStart || svrRec?.breakStart);
+  const hasBE    = !!(localBE || effectiveRec.breakEnd   || svrRec?.breakEnd);
   const canIn    = gps==="ok" && !hasCI && !effectiveRec.leaveType && !busy;
   const onBreak  = hasBS && !hasBE;   // กำลังพักอยู่จริงๆ
   const canOut   = gps==="ok" && hasCI && !hasCO && !onBreak && !busy; // ออกได้ถ้าไม่ได้พักอยู่
@@ -643,11 +673,12 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
           {hasCI&&<span className="pill" style={{background:"var(--accBg)",color:"var(--acc)",border:"1px solid var(--acc)40"}}>▶ {ft(localCI||effectiveRec.checkIn)}</span>}
           {hasCO&&<span className="pill" style={{background:"var(--redBg)",color:"var(--red)",border:"1px solid var(--red)40"}}>■ {ft(localCO||effectiveRec.checkOut)}</span>}
           {hasBS&&!hasBE&&(()=>{
-            const liveMins=dm(localBS||effectiveRec.breakStart,now.toISOString());
+            const bsTime = localBS||effectiveRec.breakStart||svrRec?.breakStart;
+            const liveMins=dm(bsTime,now.toISOString());
             const limit=s?.breakLimitMins??60;
             const over=liveMins!=null&&liveMins>limit;
             return <span className="pill" style={{background:over?"var(--redBg)":"var(--yellowBg)",color:over?"var(--red)":"var(--yellow)",border:`1px solid ${over?"var(--red)":"var(--yellow)"}40`,animation:"pulse 2s infinite"}}>
-              {over?"🔴":"☕"} พักอยู่ {liveMins!=null?hm(liveMins):""}{over?` (เกิน ${liveMins-limit}น.)`:""}
+              {over?"🔴":"☕"} พักอยู่ {liveMins!=null?hm(liveMins):"..."}{over?` (⚠ เกิน ${liveMins-limit}น.)`:""}
             </span>;
           })()}
           {hasBE&&(()=>{
@@ -724,15 +755,15 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
           {/* Break button */}
           {hasCI&&!hasCO&&(
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
-              <button onClick={doBreakStart} disabled={!canBreakStart} style={{padding:"14px 12px",borderRadius:14,textAlign:"center",background:canBreakStart?"var(--yellowBg)":"var(--card2)",color:canBreakStart?"var(--yellow)":"var(--tx3)",border:`1.5px solid ${canBreakStart?"var(--yellow)":"var(--br)"}`,opacity:hasBS&&!canBreakStart?.55:1,transition:"all .2s"}}>
-                <div style={{fontSize:18,marginBottom:4}}>☕</div>
-                <div style={{fontWeight:700,fontSize:13}}>เริ่มพัก</div>
-                {hasBS&&<div className="mono" style={{fontSize:11,marginTop:3,opacity:.7}}>{ft(localBS||effectiveRec.breakStart)}</div>}
+              <button onClick={doBreakStart} disabled={!canBreakStart} style={{padding:"14px 12px",borderRadius:14,textAlign:"center",background:hasBS?"var(--yellowBg)":canBreakStart?"var(--yellowBg)":"var(--card2)",color:hasBS?"var(--yellow)":canBreakStart?"var(--yellow)":"var(--tx3)",border:`1.5px solid ${hasBS||canBreakStart?"var(--yellow)":"var(--br)"}`,opacity:hasBS&&!canBreakStart?.75:1,transition:"all .2s"}}>
+                <div style={{fontSize:18,marginBottom:4}}>{hasBS?"☕":"🍵"}</div>
+                <div style={{fontWeight:700,fontSize:13}}>{hasBS?"พักอยู่":"เริ่มพัก"}</div>
+                {hasBS&&<div className="mono" style={{fontSize:11,marginTop:3,opacity:.8}}>{ft(localBS||effectiveRec.breakStart||svrRec?.breakStart)}</div>}
               </button>
-              <button onClick={doBreakEnd} disabled={!canBreakEnd} style={{padding:"14px 12px",borderRadius:14,textAlign:"center",background:canBreakEnd?"rgba(134,239,172,.15)":"var(--card2)",color:canBreakEnd?"#16a34a":"var(--tx3)",border:`1.5px solid ${canBreakEnd?"#16a34a":"var(--br)"}`,opacity:hasBE&&!canBreakEnd?.55:1,transition:"all .2s"}}>
-                <div style={{fontSize:18,marginBottom:4}}>🔙</div>
-                <div style={{fontWeight:700,fontSize:13}}>กลับมาแล้ว</div>
-                {hasBE&&<div className="mono" style={{fontSize:11,marginTop:3,opacity:.7}}>{ft(localBE||effectiveRec.breakEnd)}</div>}
+              <button onClick={doBreakEnd} disabled={!canBreakEnd} style={{padding:"14px 12px",borderRadius:14,textAlign:"center",background:canBreakEnd?"rgba(134,239,172,.15)":hasBE?"var(--accBg)":"var(--card2)",color:canBreakEnd?"#16a34a":hasBE?"var(--acc)":"var(--tx3)",border:`1.5px solid ${canBreakEnd?"#16a34a":hasBE?"var(--acc)":"var(--br)"}`,opacity:hasBE&&!canBreakEnd?.75:1,transition:"all .2s"}}>
+                <div style={{fontSize:18,marginBottom:4}}>{hasBE?"✅":"🔙"}</div>
+                <div style={{fontWeight:700,fontSize:13}}>{hasBE?"กลับแล้ว":"กลับมาแล้ว"}</div>
+                {hasBE&&<div className="mono" style={{fontSize:11,marginTop:3,opacity:.8}}>{ft(localBE||effectiveRec.breakEnd||svrRec?.breakEnd)}</div>}
               </button>
             </div>
           )}
