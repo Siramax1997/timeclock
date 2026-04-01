@@ -382,32 +382,65 @@ export default function App() {
 
 // ─── Login ────────────────────────────────────────────────────────────────────
 function Login({employees,err,clinic,onLogin,onRetry}){
-  const SK = "tanavet_last_id";
-  const[id,setId]=useState(()=>{ try{ return localStorage.getItem(SK)||""; }catch{return "";} });
-  const[pin,setPin]=useState("");
-  const[error,setError]=useState("");const[shake,setShake]=useState(false);
-  const[now,setNow]=useState(new Date());
+  const SK_ID  = "tv_id";
+  const SK_PIN = "tv_pin";
+  const SK_REM = "tv_remember";
+  const ls = (k,d="")=>{ try{ return localStorage.getItem(k)||d; }catch{return d;} };
+  const lsSet = (k,v)=>{ try{ localStorage.setItem(k,v); }catch{} };
+  const lsDel = (k)=>{ try{ localStorage.removeItem(k); }catch{} };
+
+  const remembered = ls(SK_REM)==="1";
+  const[id,setId]       = useState(()=>ls(SK_ID,""));
+  const[pin,setPin]     = useState(()=>remembered ? ls(SK_PIN,"") : "");
+  const[remember,setRemember] = useState(remembered);
+  const[showPin,setShowPin]   = useState(false);
+  const[error,setError] = useState("");
+  const[shake,setShake] = useState(false);
+  const[now,setNow]     = useState(new Date());
   const pinRef = useRef(null);
+
   useEffect(()=>{
+    // Auto-focus PIN if ID already filled
     if(id && pinRef.current) setTimeout(()=>pinRef.current?.focus(),100);
     const t=setInterval(()=>setNow(new Date()),1000);
     return()=>clearInterval(t);
   },[]);
-  const handleId=(v)=>{ setId(v); try{ localStorage.setItem(SK,v.toUpperCase()); }catch{} };
+
+  const handleId=(v)=>{
+    const uid=v.toUpperCase();
+    setId(uid);
+    lsSet(SK_ID,uid);
+    // If switching user, clear saved PIN for security
+    if(uid!==ls(SK_ID)) { setPin(""); lsDel(SK_PIN); }
+  };
+
+  const handleRemember=(checked)=>{
+    setRemember(checked);
+    lsSet(SK_REM, checked?"1":"0");
+    if(!checked){ lsDel(SK_PIN); } // Clear saved PIN immediately when unchecked
+  };
+
   const go=()=>{
     const uid=id.trim().toUpperCase();
     const u=employees.find(e=>e.id===uid&&String(e.pin)===String(pin));
-    if(u){ try{ localStorage.setItem(SK,uid); }catch{} onLogin(u); }
-    else{
+    if(u){
+      lsSet(SK_ID,uid);
+      if(remember){ lsSet(SK_PIN,pin); lsSet(SK_REM,"1"); }
+      else { lsDel(SK_PIN); lsSet(SK_REM,"0"); }
+      onLogin(u);
+    } else {
       setError("รหัสพนักงานหรือ PIN ไม่ถูกต้อง");
-      setPin(""); // ล้าง PIN แต่คง ID
+      setPin("");
+      if(remember){ lsDel(SK_PIN); } // Clear wrong PIN from storage
       setShake(true); setTimeout(()=>setShake(false),500);
       setTimeout(()=>pinRef.current?.focus(),100);
     }
   };
+
   return(
     <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
       <div style={{width:"100%",maxWidth:360,animation:shake?"shake .4s":""}}>
+        {/* Brand */}
         <div style={{textAlign:"center",marginBottom:28}}>
           <div style={{width:80,height:80,background:"var(--accBg)",border:"2px solid var(--acc)",borderRadius:24,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px",fontSize:40,boxShadow:"0 0 40px var(--accBg)"}}>🐾</div>
           <div style={{fontSize:22,fontWeight:800,color:"var(--tx)"}}>{clinic?.name||"คลินิคท่านาสัตวแพทย์"}</div>
@@ -417,24 +450,87 @@ function Login({employees,err,clinic,onLogin,onRetry}){
           </div>
           <div style={{color:"var(--tx2)",fontSize:12,marginTop:6}}>{now.toLocaleDateString("th-TH",{weekday:"long",day:"numeric",month:"long",year:"numeric",timeZone:"Asia/Bangkok"})}</div>
         </div>
+
         <div className="card" style={{padding:"26px 26px 22px"}}>
           {err&&<div style={{background:"var(--redBg)",border:"1px solid var(--red)",borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:12,color:"var(--red)",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
             <span>⚠ {err}</span>
             <button onClick={onRetry} style={{background:"none",color:"var(--acc)",border:"1px solid var(--acc)",padding:"3px 10px",fontSize:11,borderRadius:7,flexShrink:0}}>ลองใหม่</button>
           </div>}
-          <div style={{marginBottom:12}}>
-            <label className="lbl">รหัสพนักงาน</label>
-            <input placeholder="เช่น MAX01" value={id} onChange={e=>handleId(e.target.value)} onKeyDown={e=>e.key==="Enter"&&pinRef.current?.focus()} style={{textTransform:"uppercase",fontSize:15,letterSpacing:1}} autoComplete="username"/>
-          </div>
-          <div style={{marginBottom:18}}>
+
+          {/* Employee selector — show avatar+name if found */}
+          {(()=>{
+            const found = employees.find(e=>e.id===id.trim().toUpperCase());
+            return found ? (
+              <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:"var(--accBg)",border:"1px solid var(--acc)50",borderRadius:10,marginBottom:12}}>
+                <span style={{fontSize:24}}>{found.avatar||"🐾"}</span>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:700,fontSize:14,color:"var(--tx)"}}>{found.name}</div>
+                  <div style={{fontSize:11,color:"var(--tx2)"}}>{found.position||found.id}{found.department?` · ${found.department}`:""}</div>
+                </div>
+                <button onClick={()=>{setId("");setPin("");lsDel(SK_PIN);setTimeout(()=>document.getElementById("tv-id-input")?.focus(),50);}} style={{background:"var(--card2)",color:"var(--tx3)",border:"1px solid var(--br)",padding:"4px 10px",fontSize:11,borderRadius:7}}>เปลี่ยน</button>
+              </div>
+            ) : (
+              <div style={{marginBottom:12}}>
+                <label className="lbl">รหัสพนักงาน</label>
+                <input id="tv-id-input" placeholder="เช่น MAX01" value={id} onChange={e=>handleId(e.target.value)} onKeyDown={e=>e.key==="Enter"&&pinRef.current?.focus()} style={{textTransform:"uppercase",fontSize:15,letterSpacing:1}} autoComplete="username" list="emp-list"/>
+                <datalist id="emp-list">
+                  {employees.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}
+                </datalist>
+              </div>
+            );
+          })()}
+
+          {/* PIN field */}
+          <div style={{marginBottom:14}}>
             <label className="lbl">รหัส PIN</label>
-            <input ref={pinRef} type="password" placeholder="• • • •" value={pin} onChange={e=>setPin(e.target.value)} onKeyDown={e=>e.key==="Enter"&&go()} style={{fontSize:20,letterSpacing:6}} autoComplete="current-password"/>
+            <div style={{position:"relative"}}>
+              <input
+                ref={pinRef}
+                type={showPin?"text":"password"}
+                placeholder="• • • •"
+                value={pin}
+                onChange={e=>setPin(e.target.value)}
+                onKeyDown={e=>e.key==="Enter"&&go()}
+                style={{fontSize:20,letterSpacing:showPin?2:6,paddingRight:44}}
+                autoComplete={remember?"current-password":"off"}
+              />
+              <button
+                onClick={()=>setShowPin(!showPin)}
+                style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",color:"var(--tx3)",fontSize:16,padding:"4px 6px",borderRadius:6}}
+                tabIndex={-1}
+                title={showPin?"ซ่อน PIN":"แสดง PIN"}
+              >
+                {showPin?"🙈":"👁"}
+              </button>
+            </div>
           </div>
+
+          {/* Remember me */}
+          <label style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,cursor:"pointer",userSelect:"none"}}>
+            <div
+              onClick={()=>handleRemember(!remember)}
+              style={{width:40,height:22,borderRadius:11,background:remember?"var(--acc)":"var(--card2)",border:`1.5px solid ${remember?"var(--acc)":"var(--br)"}`,position:"relative",transition:"all .2s",flexShrink:0}}
+            >
+              <div style={{width:16,height:16,borderRadius:"50%",background:"#fff",position:"absolute",top:2,left:remember?20:2,transition:"left .2s",boxShadow:"0 1px 4px rgba(0,0,0,.2)"}}/>
+            </div>
+            <div>
+              <div style={{fontSize:13,fontWeight:500,color:"var(--tx)"}}>จดจำการเข้าสู่ระบบ</div>
+              <div style={{fontSize:10,color:"var(--tx3)"}}>บันทึกรหัสพนักงานและ PIN ไว้ในอุปกรณ์นี้</div>
+            </div>
+          </label>
+
           {error&&<div style={{background:"var(--redBg)",border:"1px solid var(--red)50",borderRadius:9,padding:"10px 14px",marginBottom:14,fontSize:13,color:"var(--red)"}}>✗ {error}</div>}
+
           <button onClick={go} style={{width:"100%",padding:13,background:"linear-gradient(135deg,var(--acc),var(--acc2))",color:"#fff",fontWeight:700,fontSize:15,borderRadius:12,boxShadow:"0 4px 20px var(--accBg)",letterSpacing:.5}}>
             เข้าสู่ระบบ →
           </button>
-          {employees.length===0&&<div style={{marginTop:10,textAlign:"center",fontSize:11,color:"var(--tx3)"}}>⚠ ไม่พบข้อมูลพนักงาน</div>}
+
+          {employees.length===0&&<div style={{marginTop:12,textAlign:"center",fontSize:11,color:"var(--tx3)"}}>⚠ ไม่พบข้อมูลพนักงาน</div>}
+
+          {/* Security note */}
+          {remember&&<div style={{marginTop:12,fontSize:10,color:"var(--tx3)",textAlign:"center",lineHeight:1.6}}>
+            🔒 PIN จะถูกเก็บในอุปกรณ์นี้เท่านั้น — อย่าใช้กับอุปกรณ์สาธารณะ
+          </div>}
         </div>
       </div>
     </div>
