@@ -646,11 +646,11 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
   const leaveLeft  = Math.max(0, s2.maxLeaveDays - leaveUsed);
   const moHrs = moRecs.reduce((x,r)=>x+(dm(r.checkIn,r.checkOut)||0),0); // gross
   // Net hrs (deduct break with ceiling) and OT this month
-  const moNet = moRecs.reduce((x,r)=>{ const s3=getScheduleForDate(r.date,me,gSch); const res=calcOT(r.checkIn,r.checkOut,r.breakStart,r.breakEnd,s3); return x+(res?.net??0); },0);
+  const moNet = moRecs.reduce((x,r)=>{ const s3=getScheduleForDate(r.date,me,gSch); const res=calcOT(r.checkIn,r.checkOut,r.breakStart,r.breakEnd,s3); return x+(res?.gross??0); },0); // gross = รวมพักด้วย
   const moOT  = moRecs.reduce((x,r)=>{ const s3=getScheduleForDate(r.date,me,gSch); const res=calcOT(r.checkIn,r.checkOut,r.breakStart,r.breakEnd,s3); return x+(res?.ot??0); },0);
   // Today OT (live)
   const todayOTres = calcOT(effectiveRec.checkIn, effectiveRec.checkOut||new Date().toISOString(), effectiveRec.breakStart, effectiveRec.breakEnd, s);
-  const todayNet  = todayOTres?.net  ?? null;
+  const todayNet  = todayOTres?.gross ?? null; // gross รวมพักด้วย
   const todayOT   = todayOTres?.isOT ? todayOTres.ot : 0;
 
   // ── GPS check ──────────────────────────────────────────────────────────────
@@ -770,8 +770,8 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
     setBusy(false);
   };
   const exportCSV=()=>{
-    const rows=[["วันที่","เข้างาน","ออกงาน","เริ่มพัก","กลับจากพัก","พัก(น.)","สถานะพัก","ชม.ปกติ","ชม.สุทธิ","OT(น.)","OT(ชม:น.)","สถานะงาน"]];
-    myRecs.forEach(r=>{ const s3=getScheduleForDate(r.date,me,gSch);const st3=STATUS(r,s3);const bm=dm(r.breakStart,r.breakEnd);const total=dm(r.checkIn,r.checkOut);const net=total!=null?total-(bm||0):null;const bs=breakStatus(bm,s3?.breakLimitMins); const otRes3=calcOT(r.checkIn,r.checkOut,r.breakStart,r.breakEnd,s3); rows.push([r.date,ft(r.checkIn),ft(r.checkOut),ft(r.breakStart),ft(r.breakEnd),bm!=null?bm:"",bs?bs.l:"",otRes3?hm(otRes3.normal):"",otRes3?hm(otRes3.net):"",otRes3?.ot||"",otRes3?.isOT?hm(otRes3.ot):"",st3.l]); });
+    const rows=[["วันที่","เข้างาน","ออกงาน","เริ่มพัก","กลับจากพัก","พัก(น.)","สถานะพัก","ชม.ปกติ(ตาราง)","ชม.รวม(รวมพัก)","OT(น.)","OT(ชม:น.)","สถานะงาน"]];
+    myRecs.forEach(r=>{ const s3=getScheduleForDate(r.date,me,gSch);const st3=STATUS(r,s3);const bm=dm(r.breakStart,r.breakEnd);const total=dm(r.checkIn,r.checkOut);const net=total!=null?total-(bm||0):null;const bs=breakStatus(bm,s3?.breakLimitMins); const otRes3=calcOT(r.checkIn,r.checkOut,r.breakStart,r.breakEnd,s3); rows.push([r.date,ft(r.checkIn),ft(r.checkOut),ft(r.breakStart),ft(r.breakEnd),bm!=null?bm:"",bs?bs.l:"",otRes3?hm(otRes3.normal):"",otRes3?hm(otRes3.gross):"",otRes3?.ot||"",otRes3?.isOT?hm(otRes3.ot):"",st3.l]); });
     const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["\uFEFF"+rows.map(x=>x.join(",")).join("\n")],{type:"text/csv;charset=utf-8;"}));a.download=`att_${user.id}_${today()}.csv`;a.click();
   };
 
@@ -845,7 +845,7 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
         {/* Schedule info */}
         {s ? (
           <div style={{marginTop:12,padding:"8px 14px",background:"var(--card2)",borderRadius:10,display:"flex",flexWrap:"wrap",gap:12,justifyContent:"center",fontSize:11,color:"var(--tx2)"}}>
-            <span>🕐 {s.startTime}–{s.endTime}</span>
+            <span>🕐 {s.startTime}–{s.endTime} ({hm(timeToMins(s.endTime)-timeToMins(s.startTime))}ชม.รวมพัก)</span>
             <span>⏱ ผ่อนผัน {s.graceMins}น.</span>
             <span>☕ พัก {s.breakLimitMins??60}น./วัน (นับเต็ม)</span>
             {location?.name&&<span>📍 {location.name}</span>}
@@ -865,7 +865,7 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
       {/* Hours summary row */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:7,marginBottom:12}}>
         <div className="card2" style={{padding:"10px 10px",textAlign:"center"}}>
-          <div style={{fontSize:10,color:"var(--tx2)",marginBottom:4}}>⏱ ชม.สุทธิ/เดือน</div>
+          <div style={{fontSize:10,color:"var(--tx2)",marginBottom:4}}>⏱ ชม.รวม/เดือน</div>
           <div className="mono" style={{fontSize:18,fontWeight:700,color:"var(--acc)"}}>{hm(moNet)}</div>
         </div>
         <div className="card2" style={{padding:"10px 10px",textAlign:"center",borderColor:moOT>0?"var(--orange)40":"var(--br2)",background:moOT>0?"var(--orangeBg)":"var(--card2)"}}>
@@ -952,7 +952,7 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
           {myRecs.length===0?<div className="card2" style={{padding:50,textAlign:"center",color:"var(--tx3)",fontSize:14}}>📋 ยังไม่มีประวัติ</div>
           :<div className="card" style={{overflow:"hidden"}}>
             <table>
-              <thead><tr><th>วันที่</th><th>เข้า</th><th>ออก</th><th>พัก</th><th>สุทธิ</th><th>OT/สถานะ</th></tr></thead>
+              <thead><tr><th>วันที่</th><th>เข้า</th><th>ออก</th><th>พัก</th><th>รวม</th><th>OT/สถานะ</th></tr></thead>
               <tbody>{myRecs.map(r=>{ const s3=getScheduleForDate(r.date,me,gSch);const st2=STATUS(r,s3);const bm=dm(r.breakStart,r.breakEnd);const otRes=calcOT(r.checkIn,r.checkOut,r.breakStart,r.breakEnd,s3);const bs=breakStatus(bm,s3?.breakLimitMins); return(
                 <tr key={r.date}>
                   <td style={{fontSize:11,color:"var(--tx2)"}}>{fd(r.date)}</td>
@@ -961,7 +961,7 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
                   <td style={{fontSize:11}}>
                     {bs?<span className="pill" style={{background:bs.bg,color:bs.c,fontSize:9}}>☕ {bs.l}</span>:<span style={{color:"var(--tx3)"}}>—</span>}
                   </td>
-                  <td className="mono" style={{color:"var(--acc2)",fontSize:12}}>{otRes?hm(otRes.net):"—"}</td>
+                  <td className="mono" style={{color:"var(--acc2)",fontSize:12}}>{otRes?hm(otRes.gross):"—"}</td>
                   <td>
                     {otRes?.isOT
                       ?<span className="pill" style={{background:"var(--orangeBg)",color:"var(--orange)",fontSize:9}}>🔥 OT {hm(otRes.ot)}</span>
@@ -1193,7 +1193,7 @@ function AdminPanel({user,employees,records,location,gSch,clinic,onReloadAll,onR
           </div>
           <div className="card" style={{overflow:"hidden"}}>
             <table>
-              <thead><tr><th>พนักงาน</th><th>เข้า</th><th>ออก</th><th>พัก</th><th>สุทธิ</th><th>สถานะ</th><th>OT</th><th></th></tr></thead>
+              <thead><tr><th>พนักงาน</th><th>เข้า</th><th>ออก</th><th>พัก</th><th>รวม</th><th>สถานะ</th><th>OT</th><th></th></tr></thead>
               <tbody>{filtered.map(e=>{ const r=dayRecs[e.id];const s2=getScheduleForDate(date,e,gSch);const st=STATUS(r,s2);const bm=dm(r?.breakStart,r?.breakEnd);const otRes2=calcOT(r?.checkIn,r?.checkOut,r?.breakStart,r?.breakEnd,s2);const bs=breakStatus(bm,s2?.breakLimitMins); return(
                 <tr key={e.id} onClick={()=>setSelEmp(e)} style={{cursor:"pointer"}}>
                   <td><div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:18}}>{e.avatar||"🐾"}</span><div><div style={{fontWeight:600,fontSize:13,color:"var(--tx)"}}>{e.name}</div><div style={{fontSize:10,color:"var(--tx3)"}}>{e.id}</div></div></div></td>
@@ -1202,7 +1202,7 @@ function AdminPanel({user,employees,records,location,gSch,clinic,onReloadAll,onR
                   <td style={{fontSize:11}}>
                     {bs?<span className="pill" style={{background:bs.bg,color:bs.c,fontSize:9}}>☕ {bs.l}</span>:<span style={{color:"var(--tx3)"}}>—</span>}
                   </td>
-                  <td className="mono" style={{color:"var(--acc2)",fontSize:12}}>{otRes2?hm(otRes2.net):"—"}</td>
+                  <td className="mono" style={{color:"var(--acc2)",fontSize:12}}>{otRes2?hm(otRes2.gross):"—"}</td>
                   <td>{otRes2?.isOT&&<span className="pill" style={{background:"var(--orangeBg)",color:"var(--orange)",fontSize:9}}>🔥{hm(otRes2.ot)}</span>}</td>
                   <td>{!st.isOff&&<span className="pill" style={{background:st.bg,color:st.c,fontSize:9}}>{st.l}</span>}{st.isOff&&<span style={{fontSize:10,color:"var(--tx3)"}}>วันหยุด</span>}</td>
                   <td onClick={ev=>{ev.stopPropagation();if(r&&window.confirm(`ลบบันทึกวันที่ ${date} ของ ${e.name}?`)) doDeleteRecord(date,e.id);}} style={{width:40}}>{r&&<button style={{background:"var(--redBg)",color:"var(--red)",border:"none",padding:"3px 8px",fontSize:11,borderRadius:7}}>ลบ</button>}</td>
