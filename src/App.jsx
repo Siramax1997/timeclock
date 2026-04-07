@@ -30,25 +30,53 @@ const DAYS_TH = ["อา","จ","อ","พ","พฤ","ศ","ส"];
 
 // OT calculation: net = gross - break, OT = net - normalMins (if >0)
 // normalMins = schedule endTime - startTime (e.g. 08:00-18:00 = 600 min)
+// Break deduction logic:
+// - ถ้าพัก < limit (เช่น 60น.) → นับเป็น limit เต็ม (ceiling)
+// - ถ้าพัก > limit → นับจริง (เกินไปกี่นาที)
+// - ถ้ายังไม่กดพักเลย → หักตาม limit อยู่ดี (เพราะรวมในชั่วโมงทำงานปกติอยู่แล้ว)
+const effectiveBreak = (bm, limitMins) => {
+  const limit = limitMins ?? 60;
+  if (bm == null) return limit;        // ยังไม่ได้กดพัก → หัก limit เต็ม
+  if (bm <= limit) return limit;       // พักไม่ครบ → ยังหัก limit เต็ม
+  return bm;                           // พักเกิน → หักตามจริง
+};
+
+// OT calculation:
+// gross = checkOut - checkIn (นาที)
+// effectiveBm = ceiling break (min = limitMins)
+// net = gross - effectiveBm  (ชม.ทำงานสุทธิ)
+// normalMins = endTime - startTime (ชม.ปกติทั้งหมด รวมพักแล้ว) = เช่น 600 น. สำหรับ 8:00-18:00
+// OT = gross - normalMins  (เกินเวลาออกงาน = ทำงานเกินตาราง)
 const calcOT = (checkIn, checkOut, breakStart, breakEnd, s) => {
   if (!checkIn || !checkOut || !s) return null;
   const gross = dm(checkIn, checkOut);
   if (gross == null) return null;
-  const bm    = dm(breakStart, breakEnd) || 0;
-  const net   = gross - bm;
-  const normal = timeToMins(s.endTime) - timeToMins(s.startTime); // e.g. 540 mins
-  const ot    = net - normal;
-  return { net, normal, ot: Math.max(0, ot), isOT: ot > 0 };
+  const limit  = s.breakLimitMins ?? 60;
+  const bmReal = dm(breakStart, breakEnd);                  // เวลาพักจริง (null ถ้ายังไม่พัก)
+  const bmEff  = effectiveBreak(bmReal, limit);             // เวลาพักที่ใช้หัก (ceil to limit)
+  const net    = gross - bmEff;                             // ชม.ทำงานสุทธิ
+  const normalGross = timeToMins(s.endTime) - timeToMins(s.startTime); // เวลาทำงานรวมพัก เช่น 600
+  const ot     = gross - normalGross;                       // OT = เกินเวลาออกงาน
+  return {
+    gross,                            // เวลารวมก่อนหัก (นาที)
+    bmReal,                           // เวลาพักจริง
+    bmEff,                            // เวลาพักที่ถูกหัก
+    net,                              // ชม.สุทธิ (gross - bmEff)
+    normal: normalGross,              // ชม.ปกติตารางงาน
+    ot:     Math.max(0, ot),          // OT (นาที)
+    isOT:   ot > 0,
+    overBreak: bmReal != null ? Math.max(0, bmReal - limit) : 0, // พักเกินกี่นาที
+  };
 };
 
-// Break status pill data
+// Break status pill
 const breakStatus = (bm, limitMins) => {
   if (bm == null) return null;
   const limit = limitMins ?? 60;
   const over  = bm - limit;
   if (over > 0)  return { l:`พักเกิน ${over}น.`, c:"var(--red)",    bg:"var(--redBg)" };
-  if (over === 0) return { l:`พักครบ ${hm(bm)}`, c:"var(--acc)",    bg:"var(--accBg)" };
-  return             { l:`พัก ${hm(bm)}`,         c:"var(--yellow)", bg:"var(--yellowBg)" };
+  if (over === 0) return { l:`พักครบ ${hm(bm)}`,  c:"var(--acc)",    bg:"var(--accBg)" };
+  return             { l:`พัก ${hm(bm)}/${limit}น.`, c:"var(--yellow)", bg:"var(--yellowBg)" };
 };
 
 // ─── Per-day-of-week schedule ────────────────────────────────────────────────
@@ -616,10 +644,10 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
   const leaveUsed  = myRecs.filter(r=>r.leaveType&&r.date.startsWith(yr)).length;
   const s2 = s || { maxLeaveDays: me?.maxLeaveDays ?? gSch?.maxLeaveDays ?? 10 };
   const leaveLeft  = Math.max(0, s2.maxLeaveDays - leaveUsed);
-  const moHrs = moRecs.reduce((x,r)=>x+(dm(r.checkIn,r.checkOut)||0),0);
-  // Net hrs (deduct break) and OT this month
-  const moNet = moRecs.reduce((x,r)=>{ const s3=getScheduleForDate(r.date,me,gSch); const res=calcOT(r.checkIn,r.checkOut,r.breakStart,r.breakEnd,s3); return x+(res?.net||0); },0);
-  const moOT  = moRecs.reduce((x,r)=>{ const s3=getScheduleForDate(r.date,me,gSch); const res=calcOT(r.checkIn,r.checkOut,r.breakStart,r.breakEnd,s3); return x+(res?.ot||0); },0);
+  const moHrs = moRecs.reduce((x,r)=>x+(dm(r.checkIn,r.checkOut)||0),0); // gross
+  // Net hrs (deduct break with ceiling) and OT this month
+  const moNet = moRecs.reduce((x,r)=>{ const s3=getScheduleForDate(r.date,me,gSch); const res=calcOT(r.checkIn,r.checkOut,r.breakStart,r.breakEnd,s3); return x+(res?.net??0); },0);
+  const moOT  = moRecs.reduce((x,r)=>{ const s3=getScheduleForDate(r.date,me,gSch); const res=calcOT(r.checkIn,r.checkOut,r.breakStart,r.breakEnd,s3); return x+(res?.ot??0); },0);
   // Today OT (live)
   const todayOTres = calcOT(effectiveRec.checkIn, effectiveRec.checkOut||new Date().toISOString(), effectiveRec.breakStart, effectiveRec.breakEnd, s);
   const todayNet  = todayOTres?.net  ?? null;
@@ -798,14 +826,19 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
             const liveMins=dm(bsTime,now.toISOString());
             const limit=s?.breakLimitMins??60;
             const over=liveMins!=null&&liveMins>limit;
+            // Show "หัก 60น." when under limit
+            const deductLabel = !over ? ` (หัก ${limit}น.)` : ` (⚠ เกิน ${liveMins-limit}น.)`;
             return <span className="pill" style={{background:over?"var(--redBg)":"var(--yellowBg)",color:over?"var(--red)":"var(--yellow)",border:`1px solid ${over?"var(--red)":"var(--yellow)"}40`,animation:"pulse 2s infinite"}}>
-              {over?"🔴":"☕"} พักอยู่ {liveMins!=null?hm(liveMins):"..."}{over?` (⚠ เกิน ${liveMins-limit}น.)`:""}
+              {over?"🔴":"☕"} พักอยู่ {liveMins!=null?hm(liveMins):"..."}{deductLabel}
             </span>;
           })()}
           {hasBE&&(()=>{
             const bm2=dm(effectiveRec.breakStart,effectiveRec.breakEnd);
-            const bs2=breakStatus(bm2,s?.breakLimitMins);
-            return bs2?<span className="pill" style={{background:bs2.bg,color:bs2.c}}>☕ {bs2.l}</span>:null;
+            const limit2=s?.breakLimitMins??60;
+            const bmEff2=bm2!=null?(bm2<=limit2?limit2:bm2):limit2;
+            const bs2=breakStatus(bm2,limit2);
+            const deductLabel = bm2!=null&&bm2<limit2?` (หักเต็ม ${limit2}น.)` : "";
+            return bs2?<span className="pill" style={{background:bs2.bg,color:bs2.c}}>☕ {bs2.l}{deductLabel}</span>:null;
           })()}
           {todRec?.leaveStatus&&<span className="pill" style={{background:{pending:"var(--yellowBg)",approved:"var(--accBg)",rejected:"var(--redBg)"}[todRec.leaveStatus],color:{pending:"var(--yellow)",approved:"var(--acc)",rejected:"var(--red)"}[todRec.leaveStatus]}}>{todRec.leaveStatus==="pending"?"⏳ รออนุมัติ":todRec.leaveStatus==="approved"?"✓ อนุมัติ":"✗ ไม่อนุมัติ"}</span>}
         </div>
@@ -814,7 +847,7 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
           <div style={{marginTop:12,padding:"8px 14px",background:"var(--card2)",borderRadius:10,display:"flex",flexWrap:"wrap",gap:12,justifyContent:"center",fontSize:11,color:"var(--tx2)"}}>
             <span>🕐 {s.startTime}–{s.endTime}</span>
             <span>⏱ ผ่อนผัน {s.graceMins}น.</span>
-            <span>☕ พักได้ {s.breakLimitMins??60}น.</span>
+            <span>☕ พัก {s.breakLimitMins??60}น./วัน (นับเต็ม)</span>
             {location?.name&&<span>📍 {location.name}</span>}
           </div>
         ) : (
@@ -1336,8 +1369,9 @@ function AdminPanel({user,employees,records,location,gSch,clinic,onReloadAll,onR
               <div style={{color:"var(--acc)",fontWeight:700,fontSize:10,letterSpacing:2,marginBottom:4}}>PREVIEW</div>
               <div>มาถึง {sf.startTime} → <b style={{color:"var(--acc)"}}>ตรงเวลา ✓</b></div>
               <div>มาถึง {addMin(sf.startTime,+sf.graceMins+1)} → <b style={{color:"var(--yellow)"}}>มาสาย {+sf.graceMins+1} นาที</b></div>
-              <div>พัก {sf.breakLimitMins} น. → <b style={{color:"var(--yellow)"}}>พักครบ ✓</b></div>
-              <div>พัก {+sf.breakLimitMins+1} น. → <b style={{color:"var(--red)"}}>พักเกิน 1 นาที ⚠</b></div>
+              <div>พัก {sf.breakLimitMins} น. → <b style={{color:"var(--yellow)"}}>หัก {sf.breakLimitMins} น. ✓</b></div>
+              <div>พัก 30 น. → <b style={{color:"var(--yellow)"}}>ยังหัก {sf.breakLimitMins} น. (ceiling)</b></div>
+              <div>พัก {+sf.breakLimitMins+5} น. → <b style={{color:"var(--red)"}}>หัก {+sf.breakLimitMins+5} น. (พักเกิน 5 น.) ⚠</b></div>
             </div>
             <button onClick={()=>save("schedule",{startTime:sf.startTime,endTime:sf.endTime,graceMins:sf.graceMins,workDays:sf.workDays,maxLeaveDays:sf.maxLeaveDays,breakLimitMins:sf.breakLimitMins})} disabled={busy} style={{marginTop:16,background:"linear-gradient(135deg,var(--acc),var(--acc2))",color:"#fff",padding:"11px 24px",fontWeight:700,borderRadius:10}}>{busy?"กำลังบันทึก...":"บันทึกตารางงาน"}</button>
           </div>
