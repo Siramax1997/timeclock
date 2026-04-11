@@ -47,25 +47,45 @@ const effectiveBreak = (bm, limitMins) => {
 // net = gross - effectiveBm  (ชม.ทำงานสุทธิ)
 // normalMins = endTime - startTime (ชม.ปกติทั้งหมด รวมพักแล้ว) = เช่น 600 น. สำหรับ 8:00-18:00
 // OT = gross - normalMins  (เกินเวลาออกงาน = ทำงานเกินตาราง)
+// Round check-in DOWN to nearest hour for OT calc
+// 7:50-7:59 → 08:00, 9:50-9:59 → 10:00
+const roundCheckInForOT = (checkIn) => {
+  if (!checkIn) return null;
+  const d = new Date(checkIn);
+  const mins = d.getHours()*60 + d.getMinutes();
+  const rounded = Math.ceil(mins / 60) * 60;  // round UP to next hour
+  // Then we use the EARLIER of: actual or rounded-UP (which becomes the scheduled hour)
+  // e.g. 7:50 → ceil → 8h*60 = 480 = 08:00
+  return rounded; // minutes from midnight (rounded hour)
+};
+
 const calcOT = (checkIn, checkOut, breakStart, breakEnd, s) => {
   if (!checkIn || !checkOut || !s) return null;
   const gross = dm(checkIn, checkOut);
   if (gross == null) return null;
   const limit  = s.breakLimitMins ?? 60;
-  const bmReal = dm(breakStart, breakEnd);                  // เวลาพักจริง (null ถ้ายังไม่พัก)
-  const bmEff  = effectiveBreak(bmReal, limit);             // เวลาพักที่ใช้หัก (ceil to limit)
-  const net    = gross - bmEff;                             // ชม.ทำงานสุทธิ
-  const normalGross = timeToMins(s.endTime) - timeToMins(s.startTime); // เวลาทำงานรวมพัก เช่น 600
-  const ot     = gross - normalGross;                       // OT = เกินเวลาออกงาน
+  const bmReal = dm(breakStart, breakEnd);
+  const bmEff  = effectiveBreak(bmReal, limit);
+  const net    = gross - bmEff;
+  const normalGross = timeToMins(s.endTime) - timeToMins(s.startTime);
+
+  // OT: use rounded check-in (7:50→8:00) vs actual check-out
+  // gross_for_OT = checkOut - roundedCheckIn
+  const ciRounded = roundCheckInForOT(checkIn); // mins from midnight
+  const coMins = new Date(checkOut).getHours()*60 + new Date(checkOut).getMinutes();
+  const grossForOT = coMins - ciRounded; // นาที จาก checkIn ปัดขึ้นถึง checkOut
+  const ot = grossForOT - normalGross;  // OT = เกินเวลาปกติ
+
   return {
-    gross,                            // เวลารวมก่อนหัก (นาที)
-    bmReal,                           // เวลาพักจริง
-    bmEff,                            // เวลาพักที่ถูกหัก
-    net,                              // ชม.สุทธิ (gross - bmEff)
-    normal: normalGross,              // ชม.ปกติตารางงาน
-    ot:     Math.max(0, ot),          // OT (นาที)
-    isOT:   ot > 0,
-    overBreak: bmReal != null ? Math.max(0, bmReal - limit) : 0, // พักเกินกี่นาที
+    gross,                    // เวลารวมจริง (checkOut - checkIn)
+    grossForOT: Math.max(0, grossForOT), // เวลาหลังปัด checkIn
+    bmReal,
+    bmEff,
+    net,
+    normal: normalGross,
+    ot:   Math.max(0, ot),
+    isOT: ot > 0,
+    overBreak: bmReal != null ? Math.max(0, bmReal - limit) : 0,
   };
 };
 
@@ -751,6 +771,14 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
     } else { setLocalBE(null); showToast(false,r.message||"ผิดพลาด"); }
     setBusy(false);
   };
+  const doCancelLeave = async (date) => {
+    if(!window.confirm(`ยกเลิกใบลาวันที่ ${date}?`)) return;
+    setBusy(true);
+    const r = await call("cancelLeave", {date, empId:user.id});
+    r.success ? (await onReloadRec(), showToast(true,"ยกเลิกใบลาแล้ว")) : showToast(false, r.message||"ผิดพลาด");
+    setBusy(false);
+  };
+
   const doLeave = async () => {
     if(!lf.reason.trim()){ showToast(false,"กรุณาระบุเหตุผล"); return; }
     if(leaveLeft<=0){ showToast(false,"วันลาไม่เพียงพอ"); return; }
@@ -781,7 +809,7 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
   const svrRec   = records[today()]?.[user.id];  // server record for today
   const hasBS    = !!(localBS || effectiveRec.breakStart || svrRec?.breakStart);
   const hasBE    = !!(localBE || effectiveRec.breakEnd   || svrRec?.breakEnd);
-  const canIn    = gps==="ok" && !hasCI && !effectiveRec.leaveType && !busy;
+  const canIn    = gps==="ok" && !hasCI && !busy; // อนุญาตเช็คอินแม้มีใบลา (override ได้)
   const onBreak  = hasBS && !hasBE;   // กำลังพักอยู่จริงๆ
   const canOut   = gps==="ok" && hasCI && !hasCO && !onBreak && !busy; // ออกได้ถ้าไม่ได้พักอยู่
   const canBreakStart = gps==="ok" && hasCI && !hasCO && !hasBS && !busy;
@@ -1005,7 +1033,10 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
                 <tr key={r.date}>
                   <td style={{fontSize:11}}>{fd(r.date)}</td>
                   <td><span className="pill" style={{background:"var(--purpleBg)",color:"var(--purple)",fontSize:9}}>{{sick:"🤒 ลาป่วย",personal:"📝 ลากิจ",vacation:"🌴 พักร้อน"}[r.leaveType]||r.leaveType}</span></td>
-                  <td><span className="pill" style={{background:{pending:"var(--yellowBg)",approved:"var(--accBg)",rejected:"var(--redBg)"}[ls],color:{pending:"var(--yellow)",approved:"var(--acc)",rejected:"var(--red)"}[ls],fontSize:9}}>{ls==="pending"?"⏳รออนุมัติ":ls==="approved"?"✓อนุมัติ":"✗ปฏิเสธ"}</span></td>
+                  <td>
+                    <span className="pill" style={{background:{pending:"var(--yellowBg)",approved:"var(--accBg)",rejected:"var(--redBg)"}[ls],color:{pending:"var(--yellow)",approved:"var(--acc)",rejected:"var(--red)"}[ls],fontSize:9}}>{ls==="pending"?"⏳รออนุมัติ":ls==="approved"?"✓อนุมัติ":"✗ปฏิเสธ"}</span>
+                    {(ls==="pending"||ls==="approved")&&<button onClick={()=>doCancelLeave(r.date)} disabled={busy} style={{marginLeft:6,background:"var(--redBg)",color:"var(--red)",border:"1px solid var(--red)30",padding:"1px 7px",fontSize:10,borderRadius:6}}>ยกเลิก</button>}
+                  </td>
                   <td style={{color:"var(--tx2)",fontSize:12}}>{r.leaveReason||"—"}</td>
                 </tr>
               );})}</tbody>
@@ -1127,6 +1158,14 @@ function AdminPanel({user,employees,records,location,gSch,clinic,onReloadAll,onR
   const delEmp=async id=>{ if(id===user.id||!window.confirm(`ลบ ${id}?`))return;setBusy(true);const r=await call("deleteEmployee",{id});r.success?(await onReloadAll(),showToast(true,"ลบแล้ว")):showToast(false,r.message);setBusy(false); };
   const doDedup=async()=>{ setBusy(true);const r=await call("deduplicateRecords");r.success?(await onReloadRec(),showToast(true,`ล้างข้อมูลซ้ำ ${r.deleted} แถว`)):showToast(false,r.message);setBusy(false); };
   const doApproveLeave=async(date,empId,action)=>{ setBusy(true);const r=await call(action,{date,empId,approvedBy:user.id});r.success?(await onReloadRec(),showToast(true,action==="approveLeave"?"✓ อนุมัติแล้ว":"✗ ปฏิเสธแล้ว")):showToast(false,r.message);setBusy(false); };
+  const doDeleteLeave=async(date,empId,empName)=>{
+    if(!window.confirm(`ลบใบลาของ ${empName} วันที่ ${date}?
+(ข้อมูลเช็คอิน/เอาท์จะยังคงอยู่)`)) return;
+    setBusy(true);
+    const r=await call("cancelLeave",{date,empId});
+    r.success?(await onReloadRec(),showToast(true,"ลบใบลาแล้ว")):showToast(false,r.message||"ผิดพลาด");
+    setBusy(false);
+  };
   const exportAll=()=>{
     const rows=[["วันที่","รหัส","ชื่อ","ตำแหน่ง","เข้างาน","ออกงาน","รวม","สถานะ","ใบลา","สถานะใบลา"]];
     Object.entries(records).sort((a,b)=>b[0].localeCompare(a[0])).forEach(([d,day])=>{
@@ -1258,10 +1297,13 @@ function AdminPanel({user,employees,records,location,gSch,clinic,onReloadAll,onR
                       <td style={{fontSize:12,color:"var(--tx2)"}}>{r.leaveReason||"—"}</td>
                       <td>
                         <span className="pill" style={{background:{pending:"var(--yellowBg)",approved:"var(--accBg)",rejected:"var(--redBg)"}[ls],color:{pending:"var(--yellow)",approved:"var(--acc)",rejected:"var(--red)"}[ls],fontSize:9}}>{ls==="pending"?"⏳รอ":ls==="approved"?"✓อนุมัติ":"✗ปฏิเสธ"}</span>
-                        {ls==="pending"&&<div style={{display:"flex",gap:4,marginTop:4}}>
-                          <button onClick={()=>doApproveLeave(r.date,r.empId,"approveLeave")} disabled={busy} style={{background:"var(--accBg)",color:"var(--acc)",border:"none",padding:"2px 8px",fontSize:10,borderRadius:6}}>✓</button>
-                          <button onClick={()=>doApproveLeave(r.date,r.empId,"rejectLeave")} disabled={busy} style={{background:"var(--redBg)",color:"var(--red)",border:"none",padding:"2px 8px",fontSize:10,borderRadius:6}}>✗</button>
-                        </div>}
+                        <div style={{display:"flex",gap:4,marginTop:4,flexWrap:"wrap"}}>
+                          {ls==="pending"&&<>
+                            <button onClick={()=>doApproveLeave(r.date,r.empId,"approveLeave")} disabled={busy} style={{background:"var(--accBg)",color:"var(--acc)",border:"none",padding:"2px 8px",fontSize:10,borderRadius:6}}>✓</button>
+                            <button onClick={()=>doApproveLeave(r.date,r.empId,"rejectLeave")} disabled={busy} style={{background:"var(--redBg)",color:"var(--red)",border:"none",padding:"2px 8px",fontSize:10,borderRadius:6}}>✗</button>
+                          </>}
+                          <button onClick={()=>doDeleteLeave(r.date,r.empId,employees.find(e=>e.id===r.empId)?.name||r.empId)} disabled={busy} title="ลบใบลา" style={{background:"var(--card2)",color:"var(--tx3)",border:"1px solid var(--br)",padding:"2px 7px",fontSize:10,borderRadius:6}}>🗑</button>
+                        </div>
                       </td>
                     </tr>);
                   })}
