@@ -106,27 +106,28 @@ const getScheduleForDate = (dateStr, emp, gSch) => {
   if (!dateStr) return null;
   const dow = new Date(dateStr + "T12:00:00").getDay();
   const ws = emp?.weekSchedule;
-  if (ws && typeof ws === "object") {
-    const day = ws[String(dow)];
-    if (day === null || day === undefined) return null; // day off
-    if (day && day.s && day.e) {
-      return {
-        startTime: day.s, endTime: day.e,
-        graceMins:      emp?.graceMins      != null ? +emp.graceMins      : (gSch?.graceMins      ?? 15),
-        maxLeaveDays:   emp?.maxLeaveDays   != null ? +emp.maxLeaveDays   : (gSch?.maxLeaveDays   ?? 10),
-        breakLimitMins: emp?.breakLimitMins != null ? +emp.breakLimitMins : (gSch?.breakLimitMins ?? 60),
-      };
-    }
-  }
-  // Fallback: old workStart/workEnd/workDays
-  const workDays = (emp?.workDays || gSch?.workDays || "1,2,3,4,5").split(",").filter(Boolean).map(Number);
-  if (!workDays.includes(dow)) return null;
-  return {
-    startTime:    emp?.workStart    || gSch?.startTime    || "08:30",
-    endTime:      emp?.workEnd      || gSch?.endTime      || "17:30",
+  const baseExtra = {
     graceMins:      emp?.graceMins      != null ? +emp.graceMins      : (gSch?.graceMins      ?? 15),
     maxLeaveDays:   emp?.maxLeaveDays   != null ? +emp.maxLeaveDays   : (gSch?.maxLeaveDays   ?? 10),
     breakLimitMins: emp?.breakLimitMins != null ? +emp.breakLimitMins : (gSch?.breakLimitMins ?? 60),
+  };
+
+  if (ws && typeof ws === "object" && Object.keys(ws).length > 0) {
+    const day = ws[String(dow)];
+    if (day === null) return null;              // null = ตั้งใจให้เป็นวันหยุด
+    if (day && day.s && day.e) {               // มีตารางส่วนตัวสำหรับวันนี้
+      return { startTime: day.s, endTime: day.e, ...baseExtra };
+    }
+    // day === undefined = วันนี้ไม่ได้ set ใน weekSchedule → fall through to global
+  }
+
+  // Fallback: global schedule
+  const workDays = (emp?.workDays || gSch?.workDays || "1,2,3,4,5").split(",").filter(Boolean).map(Number);
+  if (!workDays.includes(dow)) return null;    // ไม่ใช่วันทำงาน
+  return {
+    startTime:    emp?.workStart || gSch?.startTime || "08:30",
+    endTime:      emp?.workEnd   || gSch?.endTime   || "17:30",
+    ...baseExtra,
   };
 };
 
@@ -161,7 +162,7 @@ const STATUS = (rec, s, now) => {
   const startMins = timeToMins(s.startTime);
   const endMins   = timeToMins(s.endTime);
   const late  = cM > startMins + s.graceMins;
-  const early = oM < endMins - 10;
+  const early = oM < endMins;          // ออกก่อน endTime = ออกก่อนเวลา
   if (late && early) return { l:"สาย+ออกก่อน", c:"var(--orange)", bg:"var(--orangeBg)" };
   if (late)          return { l:`มาสาย ${cM-startMins}น.`, c:"var(--yellow)", bg:"var(--yellowBg)" };
   if (early)         return { l:"ออกก่อนเวลา", c:"var(--orange)", bg:"var(--orangeBg)" };
@@ -771,14 +772,6 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
     } else { setLocalBE(null); showToast(false,r.message||"ผิดพลาด"); }
     setBusy(false);
   };
-  const doCancelLeave = async (date) => {
-    if(!window.confirm(`ยกเลิกใบลาวันที่ ${date}?`)) return;
-    setBusy(true);
-    const r = await call("cancelLeave", {date, empId:user.id});
-    r.success ? (await onReloadRec(), showToast(true,"ยกเลิกใบลาแล้ว")) : showToast(false, r.message||"ผิดพลาด");
-    setBusy(false);
-  };
-
   const doLeave = async () => {
     if(!lf.reason.trim()){ showToast(false,"กรุณาระบุเหตุผล"); return; }
     if(leaveLeft<=0){ showToast(false,"วันลาไม่เพียงพอ"); return; }
@@ -1035,7 +1028,7 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
                   <td><span className="pill" style={{background:"var(--purpleBg)",color:"var(--purple)",fontSize:9}}>{{sick:"🤒 ลาป่วย",personal:"📝 ลากิจ",vacation:"🌴 พักร้อน"}[r.leaveType]||r.leaveType}</span></td>
                   <td>
                     <span className="pill" style={{background:{pending:"var(--yellowBg)",approved:"var(--accBg)",rejected:"var(--redBg)"}[ls],color:{pending:"var(--yellow)",approved:"var(--acc)",rejected:"var(--red)"}[ls],fontSize:9}}>{ls==="pending"?"⏳รออนุมัติ":ls==="approved"?"✓อนุมัติ":"✗ปฏิเสธ"}</span>
-                    {(ls==="pending"||ls==="approved")&&<button onClick={()=>doCancelLeave(r.date)} disabled={busy} style={{marginLeft:6,background:"var(--redBg)",color:"var(--red)",border:"1px solid var(--red)30",padding:"1px 7px",fontSize:10,borderRadius:6}}>ยกเลิก</button>}
+
                   </td>
                   <td style={{color:"var(--tx2)",fontSize:12}}>{r.leaveReason||"—"}</td>
                 </tr>
