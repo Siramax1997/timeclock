@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 
 // ─── Supabase Config ──────────────────────────────────────────────────────────
 const SUPA_URL = "https://XXXX.supabase.co";   // ← เปลี่ยนตรงนี้
-const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.XXXX"; // ← เปลี่ยนตรงนี้
+const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhjd29mbmp0cXRhbHZkYnVrbG92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY1MDQ2MjUsImV4cCI6MjA5MjA4MDYyNX0.T2zIU7nV8h0aPXZwo3UzoUaxAYf26HkIgnpPs9Qq51s"; // ← เปลี่ยนตรงนี้
 
 const supa = async (method, path, body = null) => {
   try {
