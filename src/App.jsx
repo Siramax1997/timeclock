@@ -1,18 +1,19 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
 // ─── Supabase Config ──────────────────────────────────────────────────────────
-const SUPA_URL = "https://hcwofnjtqtalvdbuklov.supabase.co";   // ← เปลี่ยนตรงนี้
-const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhjd29mbmp0cXRhbHZkYnVrbG92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY1MDQ2MjUsImV4cCI6MjA5MjA4MDYyNX0.T2zIU7nV8h0aPXZwo3UzoUaxAYf26HkIgnpPs9Qq51s"; // ← เปลี่ยนตรงนี้
+const SUPA_URL = "https://XXXX.supabase.co";   // ← เปลี่ยนตรงนี้
+const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.XXXX"; // ← เปลี่ยนตรงนี้
 
-const supa = async (method, path, body = null) => {
+const supa = async (method, path, body = null, prefer = null) => {
   try {
+    const defaultPrefer = method === "POST" ? "return=representation,resolution=merge-duplicates" : "return=minimal";
     const res = await fetch(`${SUPA_URL}/rest/v1/${path}`, {
       method,
       headers: {
         "apikey": SUPA_KEY,
         "Authorization": `Bearer ${SUPA_KEY}`,
         "Content-Type": "application/json",
-        "Prefer": method === "POST" ? "return=representation" : "return=minimal",
+        "Prefer": prefer || defaultPrefer,
       },
       body: body ? JSON.stringify(body) : null,
     });
@@ -50,13 +51,9 @@ const call = async (action, params = {}) => {
     // ── SAVE CONFIG ──
     if (action === "saveConfig") {
       const val = params.data;
-      const r = await supa("POST", "config", { key: params.configKey, value: val });
-      if (!r.success) {
-        // upsert ถ้ามีอยู่แล้ว
-        const r2 = await supa("PATCH", `config?key=eq.${params.configKey}`, { value: val });
-        return r2;
-      }
-      return r;
+      // Upsert: insert or update if key already exists
+      const r = await supa("POST", "config?on_conflict=key", { key: params.configKey, value: val }, "return=minimal,resolution=merge-duplicates");
+      return r.success ? r : { success: false, message: r.message };
     }
 
     // ── GET RECORDS ──
@@ -98,8 +95,8 @@ const call = async (action, params = {}) => {
         await supa("PATCH", `records?date=eq.${date}&emp_id=eq.${empId}`, { check_in: time, lat_in: lat||null, lng_in: lng||null });
         return { success: true };
       }
-      // สร้าง row ใหม่
-      const r = await supa("POST", "records", { date, emp_id: empId, check_in: time, lat_in: lat||null, lng_in: lng||null });
+      // สร้าง row ใหม่ (upsert กันซ้ำ)
+      const r = await supa("POST", "records?on_conflict=date,emp_id", { date, emp_id: empId, check_in: time, lat_in: lat||null, lng_in: lng||null }, "return=minimal,resolution=merge-duplicates");
       if (!r.success) return r;
       return { success: true };
     }
@@ -150,7 +147,7 @@ const call = async (action, params = {}) => {
         if (ex.success && ex.data?.length > 0) {
           await supa("PATCH", `records?date=eq.${date}&emp_id=eq.${empId}`, { leave_type: leaveType, leave_reason: reason, leave_status: "pending" });
         } else {
-          await supa("POST", "records", { date, emp_id: empId, leave_type: leaveType, leave_reason: reason, leave_status: "pending" });
+          await supa("POST", "records?on_conflict=date,emp_id", { date, emp_id: empId, leave_type: leaveType, leave_reason: reason, leave_status: "pending" }, "return=minimal,resolution=merge-duplicates");
         }
       }
       return { success: true, days: dates.length };
@@ -193,8 +190,8 @@ const call = async (action, params = {}) => {
         note: p.note||"", avatar: p.avatar||"",
         week_schedule: p.weekSchedule ? (typeof p.weekSchedule==="string" ? JSON.parse(p.weekSchedule) : p.weekSchedule) : null,
       };
-      const r = await supa("POST", "employees", row);
-      return r;
+      const r = await supa("POST", "employees?on_conflict=id", row, "return=minimal,resolution=merge-duplicates");
+      return r.success ? { success: true } : r;
     }
 
     // ── UPDATE EMPLOYEE ──
