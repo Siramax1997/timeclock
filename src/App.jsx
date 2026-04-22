@@ -1,13 +1,265 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
-const API = "https://script.google.com/macros/s/AKfycbyk5pFcfXtuZm0wUFqswrQxzvgOOkMb9jTViCbktmH7KzIUGr6zhE6pzKMUsS2vUK7x/exec";
-const call = async (action, params = {}) => {
+// ─── Supabase Config ──────────────────────────────────────────────────────────
+const SUPA_URL = "https://XXXX.supabase.co";   // ← เปลี่ยนตรงนี้
+const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.XXXX"; // ← เปลี่ยนตรงนี้
+
+const supa = async (method, path, body = null) => {
   try {
-    const qs = new URLSearchParams({ action, ...params }).toString();
-    const r = await fetch(`${API}?${qs}`, { redirect: "follow" });
-    return JSON.parse(await r.text());
+    const res = await fetch(`${SUPA_URL}/rest/v1/${path}`, {
+      method,
+      headers: {
+        "apikey": SUPA_KEY,
+        "Authorization": `Bearer ${SUPA_KEY}`,
+        "Content-Type": "application/json",
+        "Prefer": method === "POST" ? "return=representation" : "return=minimal",
+      },
+      body: body ? JSON.stringify(body) : null,
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      return { success: false, message: err };
+    }
+    const text = await res.text();
+    return { success: true, data: text ? JSON.parse(text) : null };
   } catch (e) { return { success: false, message: String(e) }; }
 };
+
+// ─── API Layer (แปลง action → Supabase REST) ──────────────────────────────────
+const call = async (action, params = {}) => {
+  try {
+    // ── GET EMPLOYEES ──
+    if (action === "getEmployees") {
+      const r = await supa("GET", "employees?select=*&order=id.asc");
+      if (!r.success) return r;
+      return { success: true, data: (r.data||[]).map(rowToEmp) };
+    }
+
+    // ── GET CONFIG ──
+    if (action === "getConfig") {
+      const r = await supa("GET", "config?select=*");
+      if (!r.success) return r;
+      const cfg = {};
+      (r.data||[]).forEach(row => {
+        try { cfg[row.key] = typeof row.value === "string" ? JSON.parse(row.value) : row.value; }
+        catch { cfg[row.key] = row.value; }
+      });
+      return { success: true, data: cfg };
+    }
+
+    // ── SAVE CONFIG ──
+    if (action === "saveConfig") {
+      const val = params.data;
+      const r = await supa("POST", "config", { key: params.configKey, value: val });
+      if (!r.success) {
+        // upsert ถ้ามีอยู่แล้ว
+        const r2 = await supa("PATCH", `config?key=eq.${params.configKey}`, { value: val });
+        return r2;
+      }
+      return r;
+    }
+
+    // ── GET RECORDS ──
+    if (action === "getRecords") {
+      const r = await supa("GET", "records?select=*&order=date.asc");
+      if (!r.success) return r;
+      const records = {};
+      (r.data||[]).forEach(row => {
+        const date = row.date, empId = row.emp_id;
+        if (!date||!empId) return;
+        if (!records[date]) records[date] = {};
+        records[date][empId] = {
+          checkIn:     row.check_in    || null,
+          checkOut:    row.check_out   || null,
+          checkInLat:  row.lat_in      || null,
+          checkInLng:  row.lng_in      || null,
+          checkOutLat: row.lat_out     || null,
+          checkOutLng: row.lng_out     || null,
+          leaveType:   row.leave_type  || null,
+          leaveReason: row.leave_reason|| null,
+          leaveStatus: row.leave_status|| null,
+          approvedBy:  row.approved_by || null,
+          breakStart:  row.break_start || null,
+          breakEnd:    row.break_end   || null,
+        };
+      });
+      return { success: true, data: records };
+    }
+
+    // ── CHECK IN ──
+    if (action === "checkIn") {
+      const { date, empId, time, lat, lng } = params;
+      // Check ว่ามี record วันนี้แล้วหรือยัง
+      const existing = await supa("GET", `records?date=eq.${date}&emp_id=eq.${empId}&select=id,check_in`);
+      if (existing.success && existing.data?.length > 0) {
+        const row = existing.data[0];
+        if (row.check_in) return { success: true, alreadyCheckedIn: true, checkIn: row.check_in };
+        // มี row แต่ยังไม่มี check_in (เช่น leave row) → update
+        await supa("PATCH", `records?date=eq.${date}&emp_id=eq.${empId}`, { check_in: time, lat_in: lat||null, lng_in: lng||null });
+        return { success: true };
+      }
+      // สร้าง row ใหม่
+      const r = await supa("POST", "records", { date, emp_id: empId, check_in: time, lat_in: lat||null, lng_in: lng||null });
+      if (!r.success) return r;
+      return { success: true };
+    }
+
+    // ── CHECK OUT ──
+    if (action === "checkOut") {
+      const { date, empId, time, lat, lng } = params;
+      const existing = await supa("GET", `records?date=eq.${date}&emp_id=eq.${empId}&select=id,check_out`);
+      if (!existing.success || !existing.data?.length) return { success: false, message: "ไม่พบข้อมูลเช็คอิน" };
+      if (existing.data[0].check_out) return { success: true, alreadyCheckedOut: true, checkOut: existing.data[0].check_out };
+      await supa("PATCH", `records?date=eq.${date}&emp_id=eq.${empId}`, { check_out: time, lat_out: lat||null, lng_out: lng||null });
+      return { success: true };
+    }
+
+    // ── BREAK START ──
+    if (action === "breakStart") {
+      const { date, empId, time } = params;
+      const ex = await supa("GET", `records?date=eq.${date}&emp_id=eq.${empId}&select=id,break_start`);
+      if (!ex.success || !ex.data?.length) return { success: false, message: "ไม่พบข้อมูลเช็คอิน" };
+      if (ex.data[0].break_start) return { success: true, alreadyStarted: true, breakStart: ex.data[0].break_start };
+      await supa("PATCH", `records?date=eq.${date}&emp_id=eq.${empId}`, { break_start: time });
+      return { success: true };
+    }
+
+    // ── BREAK END ──
+    if (action === "breakEnd") {
+      const { date, empId, time } = params;
+      const ex = await supa("GET", `records?date=eq.${date}&emp_id=eq.${empId}&select=id,break_end,break_start`);
+      if (!ex.success || !ex.data?.length) return { success: false, message: "ไม่พบข้อมูล" };
+      if (ex.data[0].break_end) return { success: true, alreadyEnded: true, breakEnd: ex.data[0].break_end };
+      if (!ex.data[0].break_start) return { success: false, message: "ยังไม่ได้เริ่มพัก" };
+      await supa("PATCH", `records?date=eq.${date}&emp_id=eq.${empId}`, { break_end: time });
+      return { success: true };
+    }
+
+    // ── SUBMIT LEAVE ──
+    if (action === "submitLeave") {
+      const { empId, startDate, endDate, leaveType, reason } = params;
+      const dates = [];
+      let cur = new Date(startDate + "T12:00:00");
+      const end = new Date(endDate + "T12:00:00");
+      while (cur <= end) {
+        dates.push(cur.toISOString().slice(0,10));
+        cur.setDate(cur.getDate()+1);
+      }
+      for (const date of dates) {
+        const ex = await supa("GET", `records?date=eq.${date}&emp_id=eq.${empId}&select=id`);
+        if (ex.success && ex.data?.length > 0) {
+          await supa("PATCH", `records?date=eq.${date}&emp_id=eq.${empId}`, { leave_type: leaveType, leave_reason: reason, leave_status: "pending" });
+        } else {
+          await supa("POST", "records", { date, emp_id: empId, leave_type: leaveType, leave_reason: reason, leave_status: "pending" });
+        }
+      }
+      return { success: true, days: dates.length };
+    }
+
+    // ── APPROVE / REJECT LEAVE ──
+    if (action === "approveLeave" || action === "rejectLeave") {
+      const { date, empId, approvedBy } = params;
+      const status = action === "approveLeave" ? "approved" : "rejected";
+      await supa("PATCH", `records?date=eq.${date}&emp_id=eq.${empId}`, { leave_status: status, approved_by: approvedBy });
+      return { success: true, status };
+    }
+
+    // ── CANCEL LEAVE ──
+    if (action === "cancelLeave") {
+      const { date, empId } = params;
+      await supa("PATCH", `records?date=eq.${date}&emp_id=eq.${empId}`, { leave_type: null, leave_reason: null, leave_status: null, approved_by: null });
+      return { success: true };
+    }
+
+    // ── DELETE RECORD ──
+    if (action === "deleteRecord") {
+      const { date, empId } = params;
+      await supa("DELETE", `records?date=eq.${date}&emp_id=eq.${empId}`);
+      return { success: true };
+    }
+
+    // ── ADD EMPLOYEE ──
+    if (action === "addEmployee") {
+      const p = params;
+      const row = {
+        id: p.id, name: p.name, pin: p.pin, role: p.role||"employee",
+        email: p.email||"", phone: p.phone||"", position: p.position||"",
+        department: p.department||"", salary: p.salary||"", start_date: p.startDate||"",
+        work_start: p.workStart||"", work_end: p.workEnd||"",
+        grace_mins: p.graceMins?+p.graceMins:null,
+        work_days: p.workDays||"",
+        max_leave_days: p.maxLeaveDays?+p.maxLeaveDays:null,
+        break_limit_mins: p.breakLimitMins?+p.breakLimitMins:60,
+        note: p.note||"", avatar: p.avatar||"",
+        week_schedule: p.weekSchedule ? (typeof p.weekSchedule==="string" ? JSON.parse(p.weekSchedule) : p.weekSchedule) : null,
+      };
+      const r = await supa("POST", "employees", row);
+      return r;
+    }
+
+    // ── UPDATE EMPLOYEE ──
+    if (action === "updateEmployee") {
+      const p = params;
+      const patch = {};
+      if (p.name !== undefined)         patch.name = p.name;
+      if (p.pin !== undefined)          patch.pin = p.pin;
+      if (p.role !== undefined)         patch.role = p.role;
+      if (p.email !== undefined)        patch.email = p.email;
+      if (p.phone !== undefined)        patch.phone = p.phone;
+      if (p.position !== undefined)     patch.position = p.position;
+      if (p.department !== undefined)   patch.department = p.department;
+      if (p.salary !== undefined)       patch.salary = p.salary;
+      if (p.startDate !== undefined)    patch.start_date = p.startDate;
+      if (p.workStart !== undefined)    patch.work_start = p.workStart;
+      if (p.workEnd !== undefined)      patch.work_end = p.workEnd;
+      if (p.graceMins !== undefined)    patch.grace_mins = p.graceMins!==""?+p.graceMins:null;
+      if (p.workDays !== undefined)     patch.work_days = p.workDays;
+      if (p.maxLeaveDays !== undefined) patch.max_leave_days = p.maxLeaveDays!==""?+p.maxLeaveDays:null;
+      if (p.breakLimitMins !== undefined) patch.break_limit_mins = p.breakLimitMins!==""?+p.breakLimitMins:60;
+      if (p.note !== undefined)         patch.note = p.note;
+      if (p.avatar !== undefined)       patch.avatar = p.avatar;
+      if (p.weekSchedule !== undefined) patch.week_schedule = p.weekSchedule ? (typeof p.weekSchedule==="string" ? JSON.parse(p.weekSchedule) : p.weekSchedule) : null;
+      const r = await supa("PATCH", `employees?id=eq.${p.id}`, patch);
+      return { success: r.success, message: r.message };
+    }
+
+    // ── DELETE EMPLOYEE ──
+    if (action === "deleteEmployee") {
+      const r = await supa("DELETE", `employees?id=eq.${params.id}`);
+      return { success: r.success };
+    }
+
+    // ── DEDUPLICATE (ไม่จำเป็นแล้ว Supabase มี UNIQUE constraint) ──
+    if (action === "deduplicateRecords") {
+      return { success: true, deleted: 0 };
+    }
+
+    return { success: false, message: "unknown action: " + action };
+  } catch (e) { return { success: false, message: String(e) }; }
+};
+
+// ── rowToEmp: แปลง Supabase row → format เดิม ──────────────────────────────
+const rowToEmp = (r) => ({
+  id:           r.id || "",
+  name:         r.name || "",
+  pin:          r.pin || "",
+  role:         r.role || "employee",
+  email:        r.email || "",
+  phone:        r.phone || "",
+  position:     r.position || "",
+  department:   r.department || "",
+  salary:       r.salary || "",
+  startDate:    r.start_date || "",
+  workStart:    r.work_start || "",
+  workEnd:      r.work_end || "",
+  graceMins:    r.grace_mins != null ? +r.grace_mins : null,
+  workDays:     r.work_days || "",
+  maxLeaveDays: r.max_leave_days != null ? +r.max_leave_days : null,
+  breakLimitMins: r.break_limit_mins != null ? +r.break_limit_mins : 60,
+  note:         r.note || "",
+  avatar:       r.avatar || "",
+  weekSchedule: r.week_schedule || null,
+});
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const haversine = (a,b,c,d) => {
