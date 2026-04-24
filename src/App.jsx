@@ -1,11 +1,17 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
 // ─── Supabase Config ──────────────────────────────────────────────────────────
-const SUPA_URL = "https://XXXX.supabase.co";   // ← เปลี่ยนตรงนี้
-const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.XXXX"; // ← เปลี่ยนตรงนี้
+const SUPA_URL = "https://hcwofnjtqtalvdbuklov.supabase.co";   // ← เปลี่ยนตรงนี้
+const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhjd29mbmp0cXRhbHZkYnVrbG92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY1MDQ2MjUsImV4cCI6MjA5MjA4MDYyNX0.T2zIU7nV8h0aPXZwo3UzoUaxAYf26HkIgnpPs9Qq51s"; // ← เปลี่ยนตรงนี้
 
 const supa = async (method, path, body = null, prefer = null) => {
   try {
+    if (!SUPA_URL || SUPA_URL.includes("XXXX")) {
+      return { success: false, message: "กรุณาตั้งค่า SUPA_URL ก่อน" };
+    }
+    if (!SUPA_KEY || SUPA_KEY.includes("XXXX")) {
+      return { success: false, message: "กรุณาตั้งค่า SUPA_KEY ก่อน" };
+    }
     const defaultPrefer = method === "POST" ? "return=representation,resolution=merge-duplicates" : "return=minimal";
     const res = await fetch(`${SUPA_URL}/rest/v1/${path}`, {
       method,
@@ -18,12 +24,17 @@ const supa = async (method, path, body = null, prefer = null) => {
       body: body ? JSON.stringify(body) : null,
     });
     if (!res.ok) {
-      const err = await res.text();
-      return { success: false, message: err };
+      let errMsg = `HTTP ${res.status}`;
+      try { const j = await res.json(); errMsg = j.message || j.hint || JSON.stringify(j); } catch { errMsg = await res.text().catch(()=>errMsg); }
+      console.error("Supabase error:", method, path, errMsg);
+      return { success: false, message: errMsg };
     }
     const text = await res.text();
     return { success: true, data: text ? JSON.parse(text) : null };
-  } catch (e) { return { success: false, message: String(e) }; }
+  } catch (e) {
+    console.error("Supabase fetch error:", e);
+    return { success: false, message: String(e) };
+  }
 };
 
 // ─── API Layer (แปลง action → Supabase REST) ──────────────────────────────────
@@ -33,7 +44,7 @@ const call = async (action, params = {}) => {
     if (action === "getEmployees") {
       const r = await supa("GET", "employees?select=*&order=id.asc");
       if (!r.success) return r;
-      return { success: true, data: (r.data||[]).map(rowToEmp) };
+      return { success: true, data: (r.data||[]).map(rowToEmp).filter(Boolean) };
     }
 
     // ── GET CONFIG ──
@@ -236,27 +247,32 @@ const call = async (action, params = {}) => {
 };
 
 // ── rowToEmp: แปลง Supabase row → format เดิม ──────────────────────────────
-const rowToEmp = (r) => ({
-  id:           r.id || "",
-  name:         r.name || "",
-  pin:          r.pin || "",
-  role:         r.role || "employee",
-  email:        r.email || "",
-  phone:        r.phone || "",
-  position:     r.position || "",
-  department:   r.department || "",
-  salary:       r.salary || "",
-  startDate:    r.start_date || "",
-  workStart:    r.work_start || "",
-  workEnd:      r.work_end || "",
-  graceMins:    r.grace_mins != null ? +r.grace_mins : null,
-  workDays:     r.work_days || "",
-  maxLeaveDays: r.max_leave_days != null ? +r.max_leave_days : null,
-  breakLimitMins: r.break_limit_mins != null ? +r.break_limit_mins : 60,
-  note:         r.note || "",
-  avatar:       r.avatar || "",
-  weekSchedule: r.week_schedule || null,
-});
+const rowToEmp = (r) => {
+  if (!r) return null;
+  const clean = (v) => (!v || v === "-" || v === "NULL") ? "" : String(v);
+  const num = (v) => (v != null && v !== "" && v !== "-") ? +v : null;
+  return {
+    id:           clean(r.id),
+    name:         clean(r.name),
+    pin:          clean(r.pin),
+    role:         clean(r.role) || "employee",
+    email:        clean(r.email),
+    phone:        clean(r.phone),
+    position:     clean(r.position),
+    department:   clean(r.department),
+    salary:       clean(r.salary),
+    startDate:    clean(r.start_date),
+    workStart:    clean(r.work_start),
+    workEnd:      clean(r.work_end),
+    graceMins:    num(r.grace_mins),
+    workDays:     clean(r.work_days),
+    maxLeaveDays: num(r.max_leave_days),
+    breakLimitMins: num(r.break_limit_mins) ?? 60,
+    note:         clean(r.note),
+    avatar:       clean(r.avatar),
+    weekSchedule: r.week_schedule || null,
+  };
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const haversine = (a,b,c,d) => {
@@ -650,7 +666,7 @@ export default function App() {
   const loadAll = useCallback(async()=>{
     setLoad(true); setErr("");
     const [er,rr,cr] = await Promise.all([call("getEmployees"),call("getRecords"),call("getConfig")]);
-    if(!er.success){ setErr("เชื่อมต่อไม่สำเร็จ"); setLoad(false); return; }
+    if(!er.success){ setErr("เชื่อมต่อไม่สำเร็จ: " + (er.message||"ไม่ทราบสาเหตุ")); setLoad(false); return; }
     setEmp(er.data||[]);
     if(rr.success) setRec(rr.data||{});
     if(cr.success){ setLoc(cr.data?.location||null); setGSch(cr.data?.schedule||null); setClinic(cr.data?.clinic||null); }
