@@ -1173,6 +1173,7 @@ function AdminPanel({user,employees,records,location,gSch,clinic,onReloadAll,onR
   const moAll=Object.entries(records).filter(([d])=>d.startsWith(mo)).flatMap(([,d])=>Object.values(d));
   const statHrs=moAll.reduce((s,r)=>s+(dm(r.checkIn,r.checkOut)||0),0);
   const statOT=Object.entries(records).filter(([d])=>d.startsWith(mo)).flatMap(([,day])=>Object.entries(day)).reduce((acc,[eid,r])=>{ const emp=employees.find(e=>e.id===eid);const s2=getScheduleForDate(Object.keys(records).find(d=>records[d]?.[eid]===r)||today(),emp,gSch);const res=calcOT(r.checkIn,r.checkOut,r.breakStart,r.breakEnd,s2);return acc+(res?.ot||0); },0);
+  const onBreakCount = staff.filter(e=>{ const r=records[today()]?.[e.id]; return r?.breakStart&&!r?.breakEnd&&!r?.checkOut; }).length;
   const pendingLeaves=Object.entries(records).flatMap(([date,day])=>Object.entries(day).filter(([,r])=>r.leaveType&&r.leaveStatus==="pending").map(([empId,r])=>({date,empId,emp:employees.find(e=>e.id===empId),...r})));
 
   return(
@@ -1199,10 +1200,11 @@ function AdminPanel({user,employees,records,location,gSch,clinic,onReloadAll,onR
       </div>
 
       {/* Stats */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8,marginBottom:8}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:8,marginBottom:8}}>
         <Stat label="พนักงาน" value={staff.length} color="var(--acc2)"/>
         <Stat label="เข้า/เดือน" value={moAll.filter(r=>r.checkIn&&!r.leaveType).length} color="var(--acc)"/>
-        <Stat label="รออนุมัติ" value={pendingLeaves.length} color={pendingLeaves.length>0?"var(--yellow)":"var(--tx3)"}/>
+        <Stat label="☕ พักอยู่ตอนนี้" value={onBreakCount} color={onBreakCount>0?"var(--yellow)":"var(--tx3)"}/>
+        <Stat label="รออนุมัติ" value={pendingLeaves.length} color={pendingLeaves.length>0?"var(--orange)":"var(--tx3)"}/>
         <Stat label="ชม.รวม/เดือน" value={hm(statHrs)} color="var(--yellow)"/>
         <Stat label="🔥 OT รวม/เดือน" value={statOT>0?hm(statOT):"—"} color="var(--orange)"/>
       </div>
@@ -1217,6 +1219,35 @@ function AdminPanel({user,employees,records,location,gSch,clinic,onReloadAll,onR
       {/* OVERVIEW */}
       {tab==="overview"&&(
         <div className="fade">
+          {/* 🔔 On-break alert */}
+          {(()=>{
+            const onBreakList = staff.filter(e=>{
+              const r=dayRecs[e.id];
+              return r?.breakStart && !r?.breakEnd && !r?.checkOut;
+            });
+            if(onBreakList.length===0) return null;
+            return(
+              <div className="card2" style={{padding:"11px 16px",marginBottom:12,borderColor:"var(--yellow)60",background:"var(--yellowBg)",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+                <span style={{fontSize:16,animation:"pulse 2s infinite"}}>☕</span>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:12,fontWeight:700,color:"var(--yellow)",marginBottom:4}}>กำลังพักอยู่ {onBreakList.length} คน</div>
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                    {onBreakList.map(e=>{
+                      const r=dayRecs[e.id];
+                      const liveMins=dm(r?.breakStart,new Date().toISOString());
+                      const limit=getScheduleForDate(date,e,gSch)?.breakLimitMins??60;
+                      const over=liveMins!=null&&liveMins>limit;
+                      return(
+                        <span key={e.id} className="pill" style={{background:over?"var(--redBg)":"rgba(255,255,255,.15)",color:over?"var(--red)":"var(--yellow)",border:`1px solid ${over?"var(--red)":"var(--yellow)"}40`,fontSize:11}}>
+                          {e.avatar||"🐾"} {e.name} {liveMins!=null?hm(liveMins):"..."}{over?" ⚠":""}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
           <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
             <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{width:160}}/>
             <input placeholder="ค้นหา..." value={search} onChange={e=>setSearch(e.target.value)} style={{flex:1,minWidth:100}}/>
@@ -1224,17 +1255,41 @@ function AdminPanel({user,employees,records,location,gSch,clinic,onReloadAll,onR
           </div>
           <div className="card" style={{overflow:"hidden"}}>
             <table>
-              <thead><tr><th>พนักงาน</th><th>เข้า</th><th>ออก</th><th>พัก</th><th>รวม</th><th>สถานะ</th><th>OT</th><th></th></tr></thead>
-              <tbody>{filtered.map(e=>{ const r=dayRecs[e.id];const s2=getScheduleForDate(date,e,gSch);const st=STATUS(r,s2);const bm=dm(r?.breakStart,r?.breakEnd);const otRes2=calcOT(r?.checkIn,r?.checkOut,r?.breakStart,r?.breakEnd,s2);const bs=breakStatus(bm,s2?.breakLimitMins); return(
-                <tr key={e.id} onClick={()=>setSelEmp(e)} style={{cursor:"pointer"}}>
-                  <td><div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:18}}>{e.avatar||"🐾"}</span><div><div style={{fontWeight:600,fontSize:13,color:"var(--tx)"}}>{e.name}</div><div style={{fontSize:10,color:"var(--tx3)"}}>{e.id}</div></div></div></td>
+              <thead><tr><th>พนักงาน</th><th>เข้า</th><th>ออก</th><th>พัก</th><th>รวม</th><th>OT</th><th>สถานะ</th><th></th></tr></thead>
+              <tbody>{filtered.map(e=>{
+                const r=dayRecs[e.id];
+                const s2=getScheduleForDate(date,e,gSch);
+                const st=STATUS(r,s2);
+                const bm=dm(r?.breakStart,r?.breakEnd);
+                const otRes2=calcOT(r?.checkIn,r?.checkOut,r?.breakStart,r?.breakEnd,s2);
+                const bs=breakStatus(bm,s2?.breakLimitMins);
+                const isOnBreak = r?.breakStart && !r?.breakEnd && !r?.checkOut;
+                return(
+                <tr key={e.id} onClick={()=>setSelEmp(e)} style={{cursor:"pointer",background:isOnBreak?"var(--yellowBg)":"transparent"}}>
+                  <td>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontSize:18}}>{e.avatar||"🐾"}</span>
+                      <div>
+                        <div style={{display:"flex",alignItems:"center",gap:6}}>
+                          <div style={{fontWeight:600,fontSize:13,color:"var(--tx)"}}>{e.name}</div>
+                          {isOnBreak&&<span style={{fontSize:10,background:"var(--yellowBg)",color:"var(--yellow)",border:"1px solid var(--yellow)40",borderRadius:20,padding:"1px 7px",animation:"pulse 2s infinite"}}>☕ พักอยู่</span>}
+                        </div>
+                        <div style={{fontSize:10,color:"var(--tx3)"}}>{e.id}</div>
+                      </div>
+                    </div>
+                  </td>
                   <td className="mono" style={{color:r?.checkIn?"var(--acc)":"var(--tx3)",fontSize:12}}>{ft(r?.checkIn)}</td>
                   <td className="mono" style={{color:r?.checkOut?"var(--red)":"var(--tx3)",fontSize:12}}>{ft(r?.checkOut)}</td>
                   <td style={{fontSize:11}}>
                     {bs?<span className="pill" style={{background:bs.bg,color:bs.c,fontSize:9}}>☕ {bs.l}</span>:<span style={{color:"var(--tx3)"}}>—</span>}
                   </td>
                   <td className="mono" style={{color:"var(--acc2)",fontSize:12}}>{otRes2?hm(otRes2.gross):"—"}</td>
-                  <td>{otRes2?.isOT&&<span className="pill" style={{background:"var(--orangeBg)",color:"var(--orange)",fontSize:9}}>🔥{hm(otRes2.ot)}</span>}</td>
+                  <td>
+                    {otRes2?.isOT
+                      ?<span className="pill" style={{background:"var(--orangeBg)",color:"var(--orange)",border:"1px solid var(--orange)40",fontSize:9,fontWeight:700}}>🔥 OT {hm(otRes2.ot)}</span>
+                      :<span style={{color:"var(--tx3)",fontSize:11}}>—</span>
+                    }
+                  </td>
                   <td>{!st.isOff&&<span className="pill" style={{background:st.bg,color:st.c,fontSize:9}}>{st.l}</span>}{st.isOff&&<span style={{fontSize:10,color:"var(--tx3)"}}>วันหยุด</span>}</td>
                   <td onClick={ev=>{ev.stopPropagation();if(r&&window.confirm(`ลบบันทึกวันที่ ${date} ของ ${e.name}?`)) doDeleteRecord(date,e.id);}} style={{width:40}}>{r&&<button style={{background:"var(--redBg)",color:"var(--red)",border:"none",padding:"3px 8px",fontSize:11,borderRadius:7}}>ลบ</button>}</td>
                 </tr>
