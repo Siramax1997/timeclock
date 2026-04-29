@@ -27,6 +27,37 @@ const addMin = (t,n) => { const[h,m]=t.split(":").map(Number),x=h*60+m+n;return`
 const timeToMins = t => { if(!t)return 0;const[h,m]=t.split(":").map(Number);return h*60+m; };
 const DAYS_TH = ["อา","จ","อ","พ","พฤ","ศ","ส"];
 
+// ─── Sound notifications ──────────────────────────────────────────────────────
+const playSound = (type) => {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    const sounds = {
+      checkin:    { freq:[523,659,784],  dur:0.12, vol:0.35 }, // do-mi-sol ✓
+      checkout:   { freq:[784,659,523],  dur:0.12, vol:0.3  }, // sol-mi-do ↓
+      breakstart: { freq:[440,440],      dur:0.18, vol:0.25 }, // ding-ding
+      breakend:   { freq:[523,784,1047], dur:0.1,  vol:0.3  }, // ding-ding-high ↑
+    };
+    const s = sounds[type] || sounds.checkin;
+    let t = ctx.currentTime;
+    s.freq.forEach((f, i) => {
+      const o2 = ctx.createOscillator();
+      const g2 = ctx.createGain();
+      o2.connect(g2); g2.connect(ctx.destination);
+      o2.frequency.value = f;
+      o2.type = "sine";
+      g2.gain.setValueAtTime(0, t + i*s.dur);
+      g2.gain.linearRampToValueAtTime(s.vol, t + i*s.dur + 0.02);
+      g2.gain.linearRampToValueAtTime(0, t + i*s.dur + s.dur);
+      o2.start(t + i*s.dur);
+      o2.stop(t + i*s.dur + s.dur + 0.05);
+    });
+    ctx.close.bind(ctx); // cleanup
+  } catch(_) {} // ถ้าเบราว์เซอร์ไม่รองรับก็ไม่ error
+};
+
 // OT calculation: net = gross - break, OT = net - normalMins (if >0)
 // normalMins = schedule endTime - startTime (e.g. 08:00-18:00 = 600 min)
 // Break deduction logic:
@@ -698,7 +729,7 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
     setLocalCI(time); // Immediately update UI
     const r = await call("checkIn",{date:today(),empId:user.id,time,lat:gd.lat,lng:gd.lng});
     if(r.success){
-      showToast(true, "เช็คอินสำเร็จ ✓ "+ft(time));
+      playSound("checkin"); showToast(true, "เช็คอินสำเร็จ ✓ "+ft(time));
       if(r.alreadyCheckedIn && r.checkIn) setLocalCI(r.checkIn);
       // Reload after 4s to let Sheet propagate
       setTimeout(()=>onReloadRec(), 4000);
@@ -717,7 +748,7 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
     setLocalCO(time);
     const r = await call("checkOut",{date:today(),empId:user.id,time,lat:gd.lat,lng:gd.lng});
     if(r.success){
-      showToast(true, "เช็คเอาท์สำเร็จ ✓ "+ft(time));
+      playSound("checkout"); showToast(true, "เช็คเอาท์สำเร็จ ✓ "+ft(time));
       if(r.alreadyCheckedOut && r.checkOut) setLocalCO(r.checkOut);
       setTimeout(()=>onReloadRec(), 4000);
     } else {
@@ -744,7 +775,7 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
     const r = await call("breakStart",{date:today(),empId:user.id,time,lat:gd.lat,lng:gd.lng});
     if(r.success){
       if(r.alreadyStarted && r.breakStart) setLocalBS(r.breakStart);
-      showToast(true,"เริ่มพักแล้ว ☕ "+ft(time));
+      playSound("breakstart"); showToast(true,"เริ่มพักแล้ว ☕ "+ft(time));
       setTimeout(()=>onReloadRec(),4000);
     } else { setLocalBS(null); showToast(false,r.message||"ผิดพลาด"); }
     setBusy(false);
@@ -766,7 +797,7 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
     const r = await call("breakEnd",{date:today(),empId:user.id,time,lat:gd.lat,lng:gd.lng});
     if(r.success){
       if(r.alreadyEnded && r.breakEnd) setLocalBE(r.breakEnd);
-      showToast(true,"กลับมาแล้ว ✓ "+ft(time));
+      playSound("breakend"); showToast(true,"กลับมาแล้ว ✓ "+ft(time));
       setTimeout(()=>onReloadRec(),4000);
     } else { setLocalBE(null); showToast(false,r.message||"ผิดพลาด"); }
     setBusy(false);
@@ -910,6 +941,38 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
       {/* CHECKIN TAB */}
       {tab==="checkin"&&(
         <div className="fade">
+          {/* Who's on break — visible to everyone */}
+          {(()=>{
+            const breakingNow = empList.filter(e=>{
+              if(e.id===user.id) return false; // ตัวเองแสดงใน badge หน้านาฬิกาแล้ว
+              const r = records[today()]?.[e.id];
+              return r?.breakStart && !r?.breakEnd && !r?.checkOut;
+            });
+            if(breakingNow.length===0) return null;
+            return(
+              <div className="card2" style={{padding:"11px 14px",marginBottom:10,borderColor:"var(--yellow)50",background:"var(--yellowBg)"}}>
+                <div style={{fontSize:11,fontWeight:700,color:"var(--yellow)",marginBottom:8,letterSpacing:.5}}>☕ กำลังพักอยู่ตอนนี้</div>
+                <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                  {breakingNow.map(e=>{
+                    const r = records[today()]?.[e.id];
+                    const liveMins = dm(r?.breakStart, new Date().toISOString());
+                    const s3 = getScheduleForDate(today(),e,gSch);
+                    const limit = s3?.breakLimitMins??60;
+                    const over = liveMins!=null && liveMins>limit;
+                    return(
+                      <div key={e.id} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 10px",background:over?"var(--redBg)":"rgba(255,255,255,.35)",borderRadius:20,border:`1px solid ${over?"var(--red)40":"var(--yellow)40"}`}}>
+                        <span style={{fontSize:16}}>{e.avatar||"🐾"}</span>
+                        <div>
+                          <div style={{fontSize:12,fontWeight:600,color:over?"var(--red)":"var(--yellow)",lineHeight:1.2}}>{e.name}</div>
+                          <div style={{fontSize:10,color:"var(--tx2)"}}>{liveMins!=null?hm(liveMins):"..."}{over?" ⚠ เกิน":""}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
           {/* GPS Panel */}
           <div className="card2" style={{padding:"14px 16px",marginBottom:10}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:gMsg?10:0}}>
@@ -959,6 +1022,42 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
           <button onClick={()=>setTab("leave")} style={{width:"100%",padding:11,background:"var(--purpleBg)",color:"var(--purple)",border:"1px solid var(--purple)40",fontSize:13,fontWeight:600,borderRadius:12,marginTop:6}}>
             🌿 ส่งคำขอลา — คงเหลือ {leaveLeft} วัน
           </button>
+
+          {/* 👥 ใครพักอยู่บ้าง — แสดงให้ทุกคนเห็น */}
+          {(()=>{
+            const todayRecs2 = records[today()]||{};
+            const onBreakNow = empList.filter(e=>{
+              const r2 = todayRecs2[e.id];
+              return r2?.breakStart && !r2?.breakEnd && !r2?.checkOut;
+            });
+            if(onBreakNow.length===0) return null;
+            return(
+              <div className="card2" style={{padding:"11px 14px",marginTop:10,borderColor:"var(--yellow)50",background:"var(--yellowBg)"}}>
+                <div style={{fontSize:11,fontWeight:700,color:"var(--yellow)",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{animation:"pulse 2s infinite"}}>☕</span> กำลังพักอยู่ {onBreakNow.length} คน
+                </div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  {onBreakNow.map(e=>{
+                    const r2=todayRecs2[e.id];
+                    const mins=dm(r2?.breakStart, new Date().toISOString());
+                    const limit=getTodaySchedule(e,gSch)?.breakLimitMins??60;
+                    const over=mins!=null&&mins>limit;
+                    return(
+                      <div key={e.id} className="card" style={{padding:"7px 12px",display:"flex",alignItems:"center",gap:8,borderColor:over?"var(--red)40":"var(--yellow)40"}}>
+                        <span style={{fontSize:20}}>{e.avatar||"🐾"}</span>
+                        <div>
+                          <div style={{fontSize:12,fontWeight:600,color:over?"var(--red)":"var(--tx)"}}>{e.name}</div>
+                          <div className="mono" style={{fontSize:11,color:over?"var(--red)":"var(--yellow)"}}>
+                            {mins!=null?hm(mins):"..."}{over?" ⚠ เกิน "+(mins-limit)+"น.":""}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 
