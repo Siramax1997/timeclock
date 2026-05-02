@@ -463,17 +463,13 @@ export default function App() {
     </div>
   );
 
-  // Clock for PublicBoard
-  const [boardNow, setBoardNow] = useState(new Date());
-  useEffect(()=>{ const t=setInterval(()=>setBoardNow(new Date()),1000); return()=>clearInterval(t); },[]);
-
   return(
     <div style={ws}>
       <style>{CSS}</style><AnimBG themeId={themeId}/>
       <Toast msg={toast}/>
       <ThemeSwitcher current={themeId} onChange={changeTheme}/>
       <div style={{position:"relative",zIndex:1}}>
-        {view==="board" && <PublicBoard employees={employees} records={records} gSch={gSch} clinic={clinic} now={boardNow} onLogin={()=>setView("login")}/>}
+        {view==="board" && <PublicBoard employees={employees} records={records} gSch={gSch} clinic={clinic} onLogin={()=>setView("login")}/>}
         {view==="login" && <Login employees={employees} err={err} clinic={clinic} onLogin={login} onRetry={loadAll} onBoard={()=>setView("board")}/>}
         {view==="dash"  && <Dash  user={user} empList={employees} records={records} location={location} gSch={gSch} clinic={clinic} setRec={setRec} onReloadRec={reloadRec} onReloadEmp={reloadEmp} onLogout={logout} showToast={showToast}/>}
         {view==="admin" && <AdminPanel user={user} employees={employees} records={records} location={location} gSch={gSch} clinic={clinic} onReloadAll={loadAll} onReloadRec={reloadRec} onLogout={logout} showToast={showToast}/>}
@@ -483,7 +479,9 @@ export default function App() {
 }
 
 // ─── Public Status Board (ไม่ต้อง login) ────────────────────────────────────────
-function PublicBoard({ employees, records, gSch, clinic, now, onLogin }) {
+function PublicBoard({ employees, records, gSch, clinic, onLogin }) {
+  const [now, setNow] = useState(new Date());
+  useEffect(()=>{ const t=setInterval(()=>setNow(new Date()),1000); return()=>clearInterval(t); },[]);
   const staff = employees.filter(e => e.role !== "admin");
   const tod   = today();
 
