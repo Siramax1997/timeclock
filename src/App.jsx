@@ -416,7 +416,7 @@ export default function App() {
   const [gSch,     setGSch]   = useState(null);
   const [clinic,   setClinic] = useState(null);
   const [user,     setUser]   = useState(null);
-  const [view,     setView]   = useState("login");
+  const [view,     setView]   = useState("board"); // เริ่มที่หน้าสถานะทีมก่อน
   const [loading,  setLoad]   = useState(true);
   const [err,      setErr]    = useState("");
   const [toast,    setToast]  = useState(null);
@@ -463,13 +463,18 @@ export default function App() {
     </div>
   );
 
+  // Clock for PublicBoard
+  const [boardNow, setBoardNow] = useState(new Date());
+  useEffect(()=>{ const t=setInterval(()=>setBoardNow(new Date()),1000); return()=>clearInterval(t); },[]);
+
   return(
     <div style={ws}>
       <style>{CSS}</style><AnimBG themeId={themeId}/>
       <Toast msg={toast}/>
       <ThemeSwitcher current={themeId} onChange={changeTheme}/>
       <div style={{position:"relative",zIndex:1}}>
-        {view==="login" && <Login employees={employees} err={err} clinic={clinic} onLogin={login} onRetry={loadAll}/>}
+        {view==="board" && <PublicBoard employees={employees} records={records} gSch={gSch} clinic={clinic} now={boardNow} onLogin={()=>setView("login")}/>}
+        {view==="login" && <Login employees={employees} err={err} clinic={clinic} onLogin={login} onRetry={loadAll} onBoard={()=>setView("board")}/>}
         {view==="dash"  && <Dash  user={user} empList={employees} records={records} location={location} gSch={gSch} clinic={clinic} setRec={setRec} onReloadRec={reloadRec} onReloadEmp={reloadEmp} onLogout={logout} showToast={showToast}/>}
         {view==="admin" && <AdminPanel user={user} employees={employees} records={records} location={location} gSch={gSch} clinic={clinic} onReloadAll={loadAll} onReloadRec={reloadRec} onLogout={logout} showToast={showToast}/>}
       </div>
@@ -477,8 +482,106 @@ export default function App() {
   );
 }
 
+// ─── Public Status Board (ไม่ต้อง login) ────────────────────────────────────────
+function PublicBoard({ employees, records, gSch, clinic, now, onLogin }) {
+  const staff = employees.filter(e => e.role !== "admin");
+  const tod   = today();
+
+  const getStatus = (e) => {
+    const r = records[tod]?.[e.id];
+    const s = getTodaySchedule(e, gSch);
+    if (!r?.checkIn)           return { type:"absent",  label:"ยังไม่เข้างาน", color:"var(--tx3)",    bg:"var(--card2)",     icon:"⬜" };
+    if (r?.breakStart && !r?.breakEnd && !r?.checkOut) {
+      const mins = dm(r.breakStart, now.toISOString());
+      const limit = s?.breakLimitMins ?? 60;
+      const over  = mins != null && mins > limit;
+      return { type:"break", label:`☕ พักอยู่ ${mins!=null?hm(mins):""}${over?" ⚠":""}`, color: over?"var(--red)":"var(--yellow)", bg:"var(--yellowBg)", icon:"☕" };
+    }
+    if (r?.checkOut)           return { type:"done",    label:"เลิกงานแล้ว",   color:"var(--tx2)",    bg:"var(--card2)",     icon:"✅" };
+    return                          { type:"working", label:"กำลังทำงาน",   color:"var(--acc)",    bg:"var(--accBg)",     icon:"🟢" };
+  };
+
+  const groups = {
+    working: staff.filter(e=>getStatus(e).type==="working"),
+    break:   staff.filter(e=>getStatus(e).type==="break"),
+    done:    staff.filter(e=>getStatus(e).type==="done"),
+    absent:  staff.filter(e=>getStatus(e).type==="absent"),
+  };
+
+  return(
+    <div style={{maxWidth:480,margin:"0 auto",padding:"16px 14px 80px",minHeight:"100vh"}}>
+      {/* Header */}
+      <div style={{textAlign:"center",marginBottom:20}}>
+        <div style={{width:60,height:60,background:"var(--accBg)",border:"2px solid var(--acc)",borderRadius:18,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 10px",fontSize:30}}>🐾</div>
+        <div style={{fontSize:18,fontWeight:800,color:"var(--tx)"}}>{clinic?.name||"คลินิคท่านาสัตวแพทย์"}</div>
+        <div style={{color:"var(--tx2)",fontSize:11,letterSpacing:3,textTransform:"uppercase",marginTop:2}}>สถานะทีมงาน</div>
+        <div className="mono" style={{fontSize:36,fontWeight:700,color:"var(--acc)",marginTop:10,letterSpacing:3}}>
+          {now.toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit",second:"2-digit",timeZone:"Asia/Bangkok"})}
+        </div>
+        <div style={{color:"var(--tx2)",fontSize:12,marginTop:4}}>
+          {now.toLocaleDateString("th-TH",{weekday:"long",day:"numeric",month:"long",year:"numeric",timeZone:"Asia/Bangkok"})}
+        </div>
+      </div>
+
+      {/* Summary pills */}
+      <div style={{display:"flex",gap:7,justifyContent:"center",marginBottom:20,flexWrap:"wrap"}}>
+        {[
+          {l:`🟢 ทำงาน ${groups.working.length}`,c:"var(--acc)",bg:"var(--accBg)"},
+          {l:`☕ พัก ${groups.break.length}`,c:"var(--yellow)",bg:"var(--yellowBg)"},
+          {l:`✅ เลิกงาน ${groups.done.length}`,c:"var(--tx2)",bg:"var(--card2)"},
+          {l:`⬜ ยังไม่เข้า ${groups.absent.length}`,c:"var(--tx3)",bg:"transparent"},
+        ].map((p,i)=>(
+          <span key={i} className="pill" style={{background:p.bg,color:p.c,border:`1px solid ${p.c}30`,fontSize:12,padding:"5px 14px"}}>{p.l}</span>
+        ))}
+      </div>
+
+      {/* Group sections */}
+      {[
+        {key:"working", title:"🟢 กำลังทำงาน",   col:"var(--acc)"},
+        {key:"break",   title:"☕ กำลังพักอยู่",  col:"var(--yellow)"},
+        {key:"done",    title:"✅ เลิกงานแล้ว",   col:"var(--tx2)"},
+        {key:"absent",  title:"⬜ ยังไม่เข้างาน", col:"var(--tx3)"},
+      ].map(({key,title,col})=>{
+        const list = groups[key];
+        if(list.length===0) return null;
+        return(
+          <div key={key} style={{marginBottom:16}}>
+            <div style={{fontSize:11,fontWeight:700,color:col,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8,paddingLeft:4}}>{title}</div>
+            <div style={{display:"grid",gap:8}}>
+              {list.map(e=>{
+                const st  = getStatus(e);
+                const r   = records[tod]?.[e.id];
+                return(
+                  <div key={e.id} className="card2" style={{padding:"11px 14px",display:"flex",alignItems:"center",gap:12,borderColor:st.color+"30",background:st.bg}}>
+                    <span style={{fontSize:28,flexShrink:0}}>{e.avatar||"🐾"}</span>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:700,fontSize:14,color:"var(--tx)",lineHeight:1.3}}>{e.name}</div>
+                      <div style={{fontSize:11,color:"var(--tx2)"}}>{e.position||""}{e.department?` · ${e.department}`:""}</div>
+                    </div>
+                    <div style={{textAlign:"right",flexShrink:0}}>
+                      <div style={{fontSize:12,fontWeight:600,color:st.color}}>{st.label}</div>
+                      {r?.checkIn&&<div className="mono" style={{fontSize:10,color:"var(--tx3)",marginTop:2}}>▶ {ft(r.checkIn)}{r.checkOut?` ■ ${ft(r.checkOut)}`:""}</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+
+      {/* Login button */}
+      <div style={{position:"fixed",bottom:20,left:"50%",transform:"translateX(-50%)",zIndex:50}}>
+        <button onClick={onLogin} style={{background:"var(--card)",border:"1px solid var(--br2)",color:"var(--tx2)",padding:"10px 24px",borderRadius:50,fontSize:13,backdropFilter:"blur(16px)",boxShadow:"0 4px 20px rgba(0,0,0,.15)"}}>
+          🔐 เข้าสู่ระบบ
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Login ────────────────────────────────────────────────────────────────────
-function Login({employees,err,clinic,onLogin,onRetry}){
+function Login({employees,err,clinic,onLogin,onRetry,onBoard}){
   const SK_ID  = "tv_id";
   const SK_PIN = "tv_pin";
   const SK_REM = "tv_remember";
@@ -620,6 +723,9 @@ function Login({employees,err,clinic,onLogin,onRetry}){
 
           <button onClick={go} style={{width:"100%",padding:13,background:"linear-gradient(135deg,var(--acc),var(--acc2))",color:"#fff",fontWeight:700,fontSize:15,borderRadius:12,boxShadow:"0 4px 20px var(--accBg)",letterSpacing:.5}}>
             เข้าสู่ระบบ →
+          </button>
+          <button onClick={onBoard} style={{width:"100%",padding:11,background:"transparent",color:"var(--tx2)",border:"1px solid var(--br)",borderRadius:12,fontSize:13,marginTop:8}}>
+            👥 ดูสถานะทีมงาน (ไม่ต้อง login)
           </button>
 
           {employees.length===0&&<div style={{marginTop:12,textAlign:"center",fontSize:11,color:"var(--tx3)"}}>⚠ ไม่พบข้อมูลพนักงาน</div>}
