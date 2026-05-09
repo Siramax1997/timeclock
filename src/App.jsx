@@ -201,12 +201,13 @@ const STATUS = (rec, s, now) => {
 
 // ─── Themes ───────────────────────────────────────────────────────────────────
 const THEMES = [
-  { id:"light",   name:"ใส",        emoji:"🌿", dark:false, bg:"#edfdf6",bg2:"#e0f9ef",bg3:"#f0fffe", card:"rgba(255,255,255,.86)",card2:"rgba(255,255,255,.66)", br:"rgba(0,0,0,.09)",br2:"rgba(0,0,0,.14)", tx:"rgba(0,0,0,.84)",tx2:"rgba(0,0,0,.5)",tx3:"rgba(0,0,0,.28)", acc:"#059669",acc2:"#0d9488", aB:"rgba(5,150,105,.12)",rB:"rgba(220,38,38,.1)",yB:"rgba(202,138,4,.12)",pB:"rgba(124,58,237,.12)",oB:"rgba(234,88,12,.12)", red:"#dc2626",yellow:"#ca8a04",purple:"#7c3aed",orange:"#ea580c" },
-  { id:"vetclinic",name:"คลินิค🐾", emoji:"🐾", dark:false, bg:"#fff8f2",bg2:"#fff3e8",bg3:"#fff9f4", card:"rgba(255,255,255,.88)",card2:"rgba(255,255,255,.7)",  br:"rgba(0,0,0,.08)",br2:"rgba(0,0,0,.13)", tx:"rgba(0,0,0,.84)",tx2:"rgba(0,0,0,.5)",tx3:"rgba(0,0,0,.28)", acc:"#ea580c",acc2:"#d97706", aB:"rgba(234,88,12,.12)",rB:"rgba(220,38,38,.1)",yB:"rgba(202,138,4,.12)",pB:"rgba(124,58,237,.12)",oB:"rgba(234,88,12,.12)", red:"#dc2626",yellow:"#ca8a04",purple:"#7c3aed",orange:"#ea580c" },
-  { id:"vetnight", name:"คลินิคกลางคืน🌙", emoji:"🌙", dark:true,  bg:"#160a00",bg2:"#1f0e00",bg3:"#120800", card:"rgba(255,255,255,.07)",card2:"rgba(255,255,255,.1)",  br:"rgba(251,146,60,.18)",br2:"rgba(251,146,60,.28)", tx:"rgba(255,255,255,.94)",tx2:"rgba(255,255,255,.5)",tx3:"rgba(255,255,255,.25)", acc:"#fb923c",acc2:"#f59e0b", aB:"rgba(251,146,60,.18)",rB:"rgba(248,113,113,.15)",yB:"rgba(251,191,36,.15)",pB:"rgba(192,132,252,.15)",oB:"rgba(251,146,60,.18)", red:"#f87171",yellow:"#fbbf24",purple:"#c084fc",orange:"#fb923c" },
-  { id:"forest",   name:"ป่า",       emoji:"🌲", dark:true,  bg:"#071a12",bg2:"#0a2318",bg3:"#071510", card:"rgba(255,255,255,.07)",card2:"rgba(255,255,255,.1)",  br:"rgba(255,255,255,.1)",br2:"rgba(255,255,255,.16)", tx:"rgba(255,255,255,.94)",tx2:"rgba(255,255,255,.5)",tx3:"rgba(255,255,255,.25)", acc:"#34d399",acc2:"#2dd4bf", aB:"rgba(52,211,153,.14)",rB:"rgba(248,113,113,.13)",yB:"rgba(251,191,36,.13)",pB:"rgba(192,132,252,.13)",oB:"rgba(251,146,60,.13)", red:"#f87171",yellow:"#fbbf24",purple:"#c084fc",orange:"#fb923c" },
-  { id:"ocean",    name:"ทะเล",      emoji:"🌊", dark:true,  bg:"#060f1f",bg2:"#0c1a35",bg3:"#08122a", card:"rgba(255,255,255,.07)",card2:"rgba(255,255,255,.1)",  br:"rgba(96,165,250,.15)",br2:"rgba(96,165,250,.25)", tx:"rgba(255,255,255,.94)",tx2:"rgba(255,255,255,.5)",tx3:"rgba(255,255,255,.25)", acc:"#38bdf8",acc2:"#67e8f9", aB:"rgba(56,189,248,.14)",rB:"rgba(248,113,113,.13)",yB:"rgba(251,191,36,.13)",pB:"rgba(192,132,252,.13)",oB:"rgba(251,146,60,.13)", red:"#f87171",yellow:"#fbbf24",purple:"#c084fc",orange:"#fb923c" },
-  { id:"sakura",   name:"ซากุระ",    emoji:"🌸", dark:false, bg:"#fef2f8",bg2:"#fdf4ff",bg3:"#fff1f5", card:"rgba(255,255,255,.86)",card2:"rgba(255,255,255,.66)", br:"rgba(0,0,0,.08)",br2:"rgba(0,0,0,.13)", tx:"rgba(0,0,0,.82)",tx2:"rgba(0,0,0,.48)",tx3:"rgba(0,0,0,.27)", acc:"#db2777",acc2:"#9333ea", aB:"rgba(219,39,119,.11)",rB:"rgba(220,38,38,.09)",yB:"rgba(202,138,4,.1)",pB:"rgba(124,58,237,.1)",oB:"rgba(234,88,12,.1)", red:"#dc2626",yellow:"#ca8a04",purple:"#7c3aed",orange:"#ea580c" },
+  { id:"light",     name:"ใส",              emoji:"🌿", dark:false, bg:"#edfdf6",bg2:"#e0f9ef",bg3:"#f0fffe", card:"rgba(255,255,255,.86)",card2:"rgba(255,255,255,.66)", br:"rgba(0,0,0,.09)",br2:"rgba(0,0,0,.14)", tx:"rgba(0,0,0,.84)",tx2:"rgba(0,0,0,.5)",tx3:"rgba(0,0,0,.28)", acc:"#059669",acc2:"#0d9488", aB:"rgba(5,150,105,.12)",rB:"rgba(220,38,38,.1)",yB:"rgba(202,138,4,.12)",pB:"rgba(124,58,237,.12)",oB:"rgba(234,88,12,.12)", red:"#dc2626",yellow:"#ca8a04",purple:"#7c3aed",orange:"#ea580c" },
+  { id:"vetclinic", name:"คลินิค 🐾",       emoji:"🐾", dark:false, bg:"#fff8f2",bg2:"#fff3e8",bg3:"#fff9f4", card:"rgba(255,255,255,.88)",card2:"rgba(255,255,255,.7)",  br:"rgba(0,0,0,.08)",br2:"rgba(0,0,0,.13)", tx:"rgba(0,0,0,.84)",tx2:"rgba(0,0,0,.5)",tx3:"rgba(0,0,0,.28)", acc:"#ea580c",acc2:"#d97706", aB:"rgba(234,88,12,.12)",rB:"rgba(220,38,38,.1)",yB:"rgba(202,138,4,.12)",pB:"rgba(124,58,237,.12)",oB:"rgba(234,88,12,.12)", red:"#dc2626",yellow:"#ca8a04",purple:"#7c3aed",orange:"#ea580c" },
+  { id:"darkpink",  name:"ดำชมพู 🖤🩷",     emoji:"🖤", dark:true,  bg:"#0f0614",bg2:"#150a1c",bg3:"#0a0110", card:"rgba(255,255,255,.07)",card2:"rgba(255,255,255,.1)",  br:"rgba(244,114,182,.18)",br2:"rgba(244,114,182,.28)", tx:"rgba(255,255,255,.94)",tx2:"rgba(255,255,255,.5)",tx3:"rgba(255,255,255,.25)", acc:"#f472b6",acc2:"#e879f9", aB:"rgba(244,114,182,.18)",rB:"rgba(248,113,113,.15)",yB:"rgba(251,191,36,.15)",pB:"rgba(192,132,252,.18)",oB:"rgba(251,146,60,.13)", red:"#f87171",yellow:"#fbbf24",purple:"#e879f9",orange:"#fb923c" },
+  { id:"vetnight",  name:"คลินิคกลางคืน 🌙",emoji:"🌙", dark:true,  bg:"#160a00",bg2:"#1f0e00",bg3:"#120800", card:"rgba(255,255,255,.07)",card2:"rgba(255,255,255,.1)",  br:"rgba(251,146,60,.18)",br2:"rgba(251,146,60,.28)", tx:"rgba(255,255,255,.94)",tx2:"rgba(255,255,255,.5)",tx3:"rgba(255,255,255,.25)", acc:"#fb923c",acc2:"#f59e0b", aB:"rgba(251,146,60,.18)",rB:"rgba(248,113,113,.15)",yB:"rgba(251,191,36,.15)",pB:"rgba(192,132,252,.15)",oB:"rgba(251,146,60,.18)", red:"#f87171",yellow:"#fbbf24",purple:"#c084fc",orange:"#fb923c" },
+  { id:"forest",    name:"ป่า 🌲",           emoji:"🌲", dark:true,  bg:"#071a12",bg2:"#0a2318",bg3:"#071510", card:"rgba(255,255,255,.07)",card2:"rgba(255,255,255,.1)",  br:"rgba(255,255,255,.1)",br2:"rgba(255,255,255,.16)", tx:"rgba(255,255,255,.94)",tx2:"rgba(255,255,255,.5)",tx3:"rgba(255,255,255,.25)", acc:"#34d399",acc2:"#2dd4bf", aB:"rgba(52,211,153,.14)",rB:"rgba(248,113,113,.13)",yB:"rgba(251,191,36,.13)",pB:"rgba(192,132,252,.13)",oB:"rgba(251,146,60,.13)", red:"#f87171",yellow:"#fbbf24",purple:"#c084fc",orange:"#fb923c" },
+  { id:"ocean",     name:"ทะเล 🌊",          emoji:"🌊", dark:true,  bg:"#060f1f",bg2:"#0c1a35",bg3:"#08122a", card:"rgba(255,255,255,.07)",card2:"rgba(255,255,255,.1)",  br:"rgba(96,165,250,.15)",br2:"rgba(96,165,250,.25)", tx:"rgba(255,255,255,.94)",tx2:"rgba(255,255,255,.5)",tx3:"rgba(255,255,255,.25)", acc:"#38bdf8",acc2:"#67e8f9", aB:"rgba(56,189,248,.14)",rB:"rgba(248,113,113,.13)",yB:"rgba(251,191,36,.13)",pB:"rgba(192,132,252,.13)",oB:"rgba(251,146,60,.13)", red:"#f87171",yellow:"#fbbf24",purple:"#c084fc",orange:"#fb923c" },
+  { id:"sakura",    name:"ซากุระ 🌸",        emoji:"🌸", dark:false, bg:"#fef2f8",bg2:"#fdf4ff",bg3:"#fff1f5", card:"rgba(255,255,255,.86)",card2:"rgba(255,255,255,.66)", br:"rgba(0,0,0,.08)",br2:"rgba(0,0,0,.13)", tx:"rgba(0,0,0,.82)",tx2:"rgba(0,0,0,.48)",tx3:"rgba(0,0,0,.27)", acc:"#db2777",acc2:"#9333ea", aB:"rgba(219,39,119,.11)",rB:"rgba(220,38,38,.09)",yB:"rgba(202,138,4,.1)",pB:"rgba(124,58,237,.1)",oB:"rgba(234,88,12,.1)", red:"#dc2626",yellow:"#ca8a04",purple:"#7c3aed",orange:"#ea580c" },
 ];
 const TV = t => ({
   "--bg":t.bg,"--bg2":t.bg2,"--bg3":t.bg3,
@@ -252,6 +253,14 @@ function AnimBG({ themeId }) {
 }
 
 // ─── CSS ──────────────────────────────────────────────────────────────────────
+// Render avatar: if URL → img, else emoji text
+const AvatarImg = ({src, size=40, style={}}) => {
+  const isImg = src && src.startsWith("http");
+  return isImg
+    ? <img src={src} alt="avatar" style={{width:size,height:size,borderRadius:"50%",objectFit:"cover",...style}} loading="lazy"/>
+    : <span style={{fontSize:size*0.55,lineHeight:1,...style}}>{src||"🐾"}</span>;
+};
+
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
@@ -298,27 +307,74 @@ function Toast({msg}){
 function Stat({label,value,color}){return(<div className="card2" style={{padding:"13px 8px",textAlign:"center"}}><div className="mono" style={{fontSize:22,fontWeight:700,color,lineHeight:1}}>{value}</div><div style={{fontSize:9,color:"var(--tx2)",marginTop:5,lineHeight:1.3}}>{label}</div></div>);}
 
 // ─── Emoji Picker ─────────────────────────────────────────────────────────────
-const EA=["🐶","🐱","🦁","🐯","🐼","🐨","🐸","🦊","🐰","🐹","🦮","🐩","🐈","🦄","🐮","🦛","🦒","🦓","🐺","🦝","🦔","🦋","🐢","🐬","🦅","🦉"];
+const AVATAR_CATS = {
+  "🐾 สัตว์": ["🐶","🐱","🦊","🐰","🐹","🐼","🐨","🐯","🦁","🐮","🐸","🐺","🦝","🦔","🦋","🐢","🦜","🦮","🐩","🐈","🦄","🐇","🦦","🦥","🐿️","🦌","🦘","🐊","🐬","🦅","🦉"],
+  "🩺 การแพทย์": ["🩺","💉","🩸","🧬","🔬","🧪","💊","🩻","🩹","🏥","🚑","🌡️","🦷","🦴","🫀","🫁","🧠","⚕️","🌿","🌱","🍃","☘️","💚","❤️‍🩹","🐾"],
+  "😺 ใบหน้า": ["😺","😸","😹","😻","😼","😽","🙀","😿","😾","🐱","🦊","🐶","🐸","🐼","🐨","🐯","🦁","🐮","🐷","🐰","🐭","🐹","🐻","🐻‍❄️","🐧","🐦","🦆","🦉","🦇"],
+  "✨ สัญลักษณ์": ["⭐","🌟","💫","✨","🌙","☀️","🌈","🔥","💎","👑","🎯","🏆","💪","🌸","🌺","🌻","🌹","🍀","🌊","⚡","🎪","🎨","🎭","🎬","🎵","🎶"],
+};
+// Legacy — used in AnimBG
+const EA=["🐶","🐱","🦁","🐯","🐼","🦊","🐰","🦮","🐈","🦄","🐮","🐺","🩺","💉","🩻","🩹","💊","🧬","🌿","🌱","🍃","🐾","🐾","🐾"];
 const EM=["🩺","💉","🩸","🧬","🔬","🧪","💊","🩻","🩹","🏥","🚑","🌡️","🦷","🦴","🫀","🫁","🧠","⚕️","🌿","🌱","🍃","☘️","💚","❤️‍🩹","🐾","✦","⭐"];
+// Photo avatars — cute illustrated style using DiceBear
+const AVATAR_STYLES = ["adventurer","avataaars","big-ears","bottts","croodles","fun-emoji","icons","identicon","initials","lorelei","micah","miniavs","open-peeps","personas","pixel-art","rings","shapes","thumbs"];
+const AVATAR_SEEDS = ["Felix","Lily","Max","Luna","Charlie","Mia","Oliver","Zoe","Leo","Bella","Jasper","Cleo","Bear","Nova","Ace","Sky","Rio","Kira","Mochi","Coco","Taro","Hana","Sora","Yuki","Nala","Simba","Nemo","Dory","Bambi","Dumbo"];
+const getAvatar = (style, seed) => `https://api.dicebear.com/9.x/${style}/svg?seed=${seed}&size=64&backgroundColor=transparent`;
 function EmojiPicker({value,onChange,onClose}){
-  const[cat,setCat]=useState("a");const list=cat==="a"?EA:EM;
+  const[cat,setCat]=useState("a");
+  const[avatarStyle,setAvatarStyle]=useState("adventurer");
+  const list=cat==="a"?EA:EM;
+  const isImgAvatar = value && value.startsWith("http");
   return(
     <div style={{position:"fixed",inset:0,zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",padding:16,background:"rgba(0,0,0,.55)",backdropFilter:"blur(8px)"}} onClick={onClose}>
-      <div style={{background:"var(--bg)",border:"1px solid var(--br2)",borderRadius:20,padding:18,width:"100%",maxWidth:320,boxShadow:"0 24px 60px rgba(0,0,0,.3)"}} onClick={e=>e.stopPropagation()}>
+      <div style={{background:"var(--bg)",border:"1px solid var(--br2)",borderRadius:20,padding:18,width:"100%",maxWidth:360,maxHeight:"80vh",overflow:"auto",boxShadow:"0 24px 60px rgba(0,0,0,.3)"}} onClick={e=>e.stopPropagation()}>
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:12}}>
           <span style={{fontSize:14,fontWeight:700,color:"var(--tx)"}}>เลือก Avatar</span>
           <button onClick={onClose} style={{background:"var(--card2)",color:"var(--tx2)",border:"1px solid var(--br)",padding:"3px 10px",fontSize:12,borderRadius:8}}>✕</button>
         </div>
-        <div style={{display:"flex",gap:6,marginBottom:12}}>
-          {[["a","🐾 สัตว์"],["m","🩺 การแพทย์"]].map(([k,l])=>(
-            <button key={k} onClick={()=>setCat(k)} style={{flex:1,padding:8,background:cat===k?"var(--accBg)":"var(--card2)",color:cat===k?"var(--acc)":"var(--tx2)",border:`1px solid ${cat===k?"var(--acc)":"var(--br)"}`,borderRadius:10,fontSize:12,fontWeight:600}}>{l}</button>
+
+        {/* Category tabs */}
+        <div style={{display:"flex",gap:5,marginBottom:12,overflowX:"auto",paddingBottom:2}}>
+          {[["a","🐾 สัตว์"],["m","🩺 การแพทย์"],["p","🖼️ รูปภาพ"]].map(([k,l])=>(
+            <button key={k} onClick={()=>setCat(k)} style={{flex:"0 0 auto",padding:"7px 12px",background:cat===k?"var(--accBg)":"var(--card2)",color:cat===k?"var(--acc)":"var(--tx2)",border:`1px solid ${cat===k?"var(--acc)":"var(--br)"}`,borderRadius:10,fontSize:12,fontWeight:600,whiteSpace:"nowrap"}}>{l}</button>
           ))}
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:6,maxHeight:200,overflowY:"auto"}}>
-          {list.map((em,i)=>(
-            <button key={i} onClick={()=>{onChange(em);onClose();}} style={{aspectRatio:"1",background:value===em?"var(--accBg)":"transparent",border:`1.5px solid ${value===em?"var(--acc)":"transparent"}`,borderRadius:10,fontSize:20,display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>{em}</button>
-          ))}
-        </div>
+
+        {/* Emoji grid */}
+        {(cat==="a"||cat==="m")&&(
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:6,maxHeight:220,overflowY:"auto"}}>
+            {list.map((em,i)=>(
+              <button key={i} onClick={()=>{onChange(em);onClose();}} style={{aspectRatio:"1",background:value===em?"var(--accBg)":"transparent",border:`1.5px solid ${value===em?"var(--acc)":"transparent"}`,borderRadius:10,fontSize:20,display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>{em}</button>
+            ))}
+          </div>
+        )}
+
+        {/* Photo avatars */}
+        {cat==="p"&&(
+          <div>
+            {/* Style selector */}
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:11,color:"var(--tx2)",marginBottom:6}}>สไตล์</div>
+              <div style={{display:"flex",gap:5,overflowX:"auto",paddingBottom:4}}>
+                {["adventurer","avataaars","big-ears","bottts","croodles","fun-emoji","lorelei","micah","open-peeps","pixel-art"].map(s=>(
+                  <button key={s} onClick={()=>setAvatarStyle(s)} style={{flex:"0 0 auto",padding:"4px 10px",background:avatarStyle===s?"var(--accBg)":"var(--card2)",color:avatarStyle===s?"var(--acc)":"var(--tx2)",border:`1px solid ${avatarStyle===s?"var(--acc)":"var(--br)"}`,borderRadius:8,fontSize:10,whiteSpace:"nowrap"}}>{s}</button>
+                ))}
+              </div>
+            </div>
+            {/* Avatar grid */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,maxHeight:240,overflowY:"auto"}}>
+              {AVATAR_SEEDS.map((seed,i)=>{
+                const url = getAvatar(avatarStyle,seed);
+                return(
+                  <button key={i} onClick={()=>{onChange(url);onClose();}} style={{aspectRatio:"1",background:value===url?"var(--accBg)":"var(--card2)",border:`2px solid ${value===url?"var(--acc)":"transparent"}`,borderRadius:12,display:"flex",alignItems:"center",justifyContent:"center",padding:4,overflow:"hidden",cursor:"pointer"}}>
+                    <img src={url} alt={seed} style={{width:"100%",height:"100%",objectFit:"contain"}} loading="lazy"/>
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{fontSize:10,color:"var(--tx3)",marginTop:8,textAlign:"center"}}>รูปสร้างโดย DiceBear — ใช้งานฟรี</div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -551,7 +607,7 @@ function PublicBoard({ employees, records, gSch, clinic, onLogin }) {
                 const r   = records[tod]?.[e.id];
                 return(
                   <div key={e.id} className="card2" style={{padding:"11px 14px",display:"flex",alignItems:"center",gap:12,borderColor:st.color+"30",background:st.bg}}>
-                    <span style={{fontSize:28,flexShrink:0}}>{e.avatar||"🐾"}</span>
+                    <div style={{flexShrink:0}}><AvatarImg src={e.avatar} size={40}/></div>
                     <div style={{flex:1}}>
                       <div style={{fontWeight:700,fontSize:14,color:"var(--tx)",lineHeight:1.3}}>{e.name}</div>
                       <div style={{fontSize:11,color:"var(--tx2)"}}>{e.position||""}{e.department?` · ${e.department}`:""}</div>
@@ -847,6 +903,13 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
   const doOut = async () => {
     if(gps!=="ok"||busy||localCO||effectiveRec.checkOut) return;
     if(!effectiveRec.checkIn){ showToast(false,"กรุณาเช็คอินก่อน"); return; }
+    // ⚠️ ยืนยันก่อนเช็คเอาท์
+    const confirmed = window.confirm(
+      `ยืนยันเช็คเอาท์ออกงาน?\n\n` +
+      `⏰ เวลาปัจจุบัน: ${new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit",timeZone:"Asia/Bangkok"})}` +
+      (onBreak ? `\n\n⚠️ คุณกำลังพักอยู่! กด "กลับมาแล้ว" ก่อนดีกว่า` : "")
+    );
+    if(!confirmed) return;
     setBusy(true);
     const time = nowISO();
     setLocalCO(time);
@@ -952,7 +1015,7 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
       {/* Topbar */}
       <div className="card2" style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 14px",marginBottom:12}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <div style={{width:40,height:40,background:"var(--accBg)",border:"1.5px solid var(--acc)",borderRadius:12,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>{me.avatar||"🐾"}</div>
+          <div style={{width:40,height:40,background:"var(--accBg)",border:"1.5px solid var(--acc)",borderRadius:12,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",flexShrink:0}}><AvatarImg src={me.avatar} size={40}/></div>
           <div>
             <div style={{fontSize:14,fontWeight:700,color:"var(--tx)",lineHeight:1.3}}>{me.name}</div>
             <div style={{fontSize:11,color:"var(--tx2)"}}>{me.position||me.id}{me.department?` · ${me.department}`:""}</div>
