@@ -132,8 +132,30 @@ const breakStatus = (bm, limitMins) => {
 // ─── Per-day-of-week schedule ────────────────────────────────────────────────
 // weekSchedule: { "1":{"s":"08:00","e":"17:00"}, ... } null = off
 // Returns null if day off, or {startTime, endTime, graceMins, maxLeaveDays}
+// ─── Shifts override ─────────────────────────────────────────────────────────
+let _shiftsMap = {};
+const setShiftsMap = (data) => {
+  _shiftsMap = {};
+  (data||[]).forEach(s=>{ _shiftsMap[`${s.date}|${s.empId}`] = s; });
+};
+const getShiftOverride = (dateStr, empId) => _shiftsMap[`${dateStr}|${empId}`] || null;
+
 const getScheduleForDate = (dateStr, emp, gSch) => {
   if (!dateStr) return null;
+  // ✅ Shifts override ก่อนเสมอ
+  if (emp?.id) {
+    const ov = getShiftOverride(dateStr, emp.id);
+    if (ov) {
+      const extra = {
+        graceMins:      emp?.graceMins      != null ? +emp.graceMins      : (gSch?.graceMins      ?? 15),
+        maxLeaveDays:   emp?.maxLeaveDays   != null ? +emp.maxLeaveDays   : (gSch?.maxLeaveDays   ?? 10),
+        breakLimitMins: emp?.breakLimitMins != null ? +emp.breakLimitMins : (gSch?.breakLimitMins ?? 60),
+      };
+      if (ov.type === "off")  return null; // หยุดแทน
+      if (ov.type === "work" && ov.startTime && ov.endTime)
+        return { startTime:ov.startTime, endTime:ov.endTime, ...extra, isShiftOverride:true };
+    }
+  }
   const dow = new Date(dateStr + "T12:00:00").getDay();
   const ws = emp?.weekSchedule;
   const baseExtra = {
@@ -467,6 +489,7 @@ function WeekScheduleEditor({ value, onChange, globalSch }) {
 // ─── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
   const [employees,setEmp]    = useState([]);
+  const [shifts,   setShifts] = useState([]);
   const [records,  setRec]    = useState({});
   const [location, setLoc]    = useState(null);
   const [gSch,     setGSch]   = useState(null);
@@ -486,11 +509,12 @@ export default function App() {
 
   const loadAll = useCallback(async()=>{
     setLoad(true); setErr("");
-    const [er,rr,cr] = await Promise.all([call("getEmployees"),call("getRecords"),call("getConfig")]);
+    const [er,rr,cr,sr] = await Promise.all([call("getEmployees"),call("getRecords"),call("getConfig"),call("getShifts")]);
     if(!er.success){ setErr("เชื่อมต่อไม่สำเร็จ: " + (er.message||"ไม่ทราบสาเหตุ")); setLoad(false); return; }
     setEmp(er.data||[]);
     if(rr.success) setRec(rr.data||{});
     if(cr.success){ setLoc(cr.data?.location||null); setGSch(cr.data?.schedule||null); setClinic(cr.data?.clinic||null); }
+    if(sr.success){ setShifts(sr.data||[]); setShiftsMap(sr.data||[]); }
     setLoad(false);
   },[]);
 
@@ -528,7 +552,7 @@ export default function App() {
         {view==="board" && <PublicBoard employees={employees} records={records} gSch={gSch} clinic={clinic} onLogin={()=>setView("login")}/>}
         {view==="login" && <Login employees={employees} err={err} clinic={clinic} onLogin={login} onRetry={loadAll} onBoard={()=>setView("board")}/>}
         {view==="dash"  && <Dash  user={user} empList={employees} records={records} location={location} gSch={gSch} clinic={clinic} setRec={setRec} onReloadRec={reloadRec} onReloadEmp={reloadEmp} onLogout={logout} showToast={showToast}/>}
-        {view==="admin" && <AdminPanel user={user} employees={employees} records={records} location={location} gSch={gSch} clinic={clinic} onReloadAll={loadAll} onReloadRec={reloadRec} onLogout={logout} showToast={showToast}/>}
+        {view==="admin" && <AdminPanel user={user} employees={employees} records={records} shifts={shifts} location={location} gSch={gSch} clinic={clinic} onReloadAll={loadAll} onReloadRec={reloadRec} onLogout={logout} showToast={showToast}/>}
       </div>
     </div>
   );
@@ -1381,8 +1405,138 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
   );
 }
 
+
+// ─── ShiftManager Component ───────────────────────────────────────────────────
+function ShiftManager({ employees, gSch, shifts, onReload, showToast }) {
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [busy, setBusy] = useState(false);
+
+  const getWeekDates = (offset=0) => {
+    const now = new Date();
+    const bkk = new Date(now.toLocaleString("en-US",{timeZone:"Asia/Bangkok"}));
+    const dow = bkk.getDay();
+    const mon = new Date(bkk); mon.setDate(bkk.getDate() - (dow===0?6:dow-1) + offset*7);
+    return Array.from({length:7},(_,i)=>{ const d=new Date(mon); d.setDate(mon.getDate()+i); return d.toLocaleDateString("en-CA",{timeZone:"Asia/Bangkok"}); });
+  };
+
+  const dates = getWeekDates(weekOffset);
+  const weekLabel = () => {
+    if(weekOffset===0) return "สัปดาห์นี้";
+    if(weekOffset===1) return "สัปดาห์หน้า";
+    if(weekOffset===-1) return "สัปดาห์ที่แล้ว";
+    return `${fd(dates[0])} — ${fd(dates[6])}`;
+  };
+
+  const getShift    = (empId,date) => shifts.find(s=>s.empId===empId&&s.date===date)||null;
+  const getDefType  = (empId,date) => { const emp=employees.find(e=>e.id===empId); const s=getScheduleForDate(date,emp,gSch); return s?"work":"off"; };
+
+  const saveShift = async (empId,date,type,startTime="",endTime="") => {
+    setBusy(true);
+    const r = await call("saveShift",{empId,date,type,startTime,endTime,note:""});
+    if(r.success){ await onReload(); showToast(true,type==="default"?"รีเซ็ตแล้ว":type==="off"?"🗓 วันหยุดแล้ว":"✅ มาทำงานแล้ว"); }
+    else showToast(false,r.message);
+    setBusy(false);
+  };
+
+  const DAY_TH=["จ","อ","พ","พฤ","ศ","ส","อา"];
+  const MO=["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+  const sd = d=>{ const x=new Date(d+"T12:00:00"); return `${x.getDate()} ${MO[x.getMonth()]}`; };
+
+  return(
+    <div className="fade">
+      {/* Week nav */}
+      <div className="card2" style={{padding:"11px 14px",marginBottom:14,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <button onClick={()=>setWeekOffset(w=>w-1)} style={{background:"var(--card2)",color:"var(--tx2)",border:"1px solid var(--br)",padding:"7px 14px",borderRadius:10}}>← ก่อนหน้า</button>
+        <div style={{textAlign:"center"}}>
+          <div style={{fontWeight:700,color:"var(--acc)",fontSize:14}}>{weekLabel()}</div>
+          <div style={{fontSize:11,color:"var(--tx2)"}}>{fd(dates[0])} – {fd(dates[6])}</div>
+        </div>
+        <button onClick={()=>setWeekOffset(w=>w+1)} style={{background:"var(--card2)",color:"var(--tx2)",border:"1px solid var(--br)",padding:"7px 14px",borderRadius:10}}>ถัดไป →</button>
+      </div>
+
+      {/* Legend */}
+      <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+        {[["🟢","ทำงาน","var(--accBg)","var(--acc)"],["⬜","หยุด","var(--card2)","var(--tx3)"],["🔄","สลับมาทำ","var(--yellowBg)","var(--yellow)"],["🔴","สลับหยุด","var(--redBg)","var(--red)"]].map(([ic,lb,bg,col])=>(
+          <span key={lb} className="pill" style={{background:bg,color:col,border:`1px solid ${col}30`,fontSize:11}}>{ic} {lb}</span>
+        ))}
+        <span style={{fontSize:11,color:"var(--tx3)",paddingTop:2}}>• จุดเหลือง = override จากปกติ</span>
+      </div>
+
+      {/* Grid table */}
+      <div style={{overflowX:"auto"}} className="card">
+        <table style={{minWidth:520}}>
+          <thead>
+            <tr>
+              <th style={{minWidth:110}}>พนักงาน</th>
+              {dates.map((d,i)=>(
+                <th key={d} style={{textAlign:"center",minWidth:64,background:d===today()?"var(--accBg)":undefined,color:d===today()?"var(--acc)":undefined,padding:"8px 4px"}}>
+                  <div style={{fontSize:13}}>{DAY_TH[i]}</div>
+                  <div style={{fontWeight:400,fontSize:10}}>{sd(d)}</div>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {employees.map(emp=>(
+              <tr key={emp.id}>
+                <td style={{padding:"8px 12px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:16}}>{emp.avatar||"🐾"}</span>
+                    <div>
+                      <div style={{fontWeight:600,fontSize:12,color:"var(--tx)",lineHeight:1.3}}>{emp.name}</div>
+                      <div style={{fontSize:9,color:"var(--tx3)"}}>{emp.id}</div>
+                    </div>
+                  </div>
+                </td>
+                {dates.map(date=>{
+                  const shift=getShift(emp.id,date);
+                  const def=getDefType(emp.id,date);
+                  const eff=shift?.type||def;
+                  const isOv=!!shift;
+                  // Style based on effective + whether it's an override
+                  let bg,col,icon;
+                  if(eff==="work"&&isOv&&def==="off"){bg="var(--yellowBg)";col="var(--yellow)";icon="🔄";}
+                  else if(eff==="work"){bg="var(--accBg)";col="var(--acc)";icon="🟢";}
+                  else if(eff==="off"&&isOv&&def==="work"){bg="var(--redBg)";col="var(--red)";icon="🔴";}
+                  else{bg="var(--card2)";col="var(--tx3)";icon="⬜";}
+                  return(
+                    <td key={date} style={{textAlign:"center",padding:"6px 4px"}}>
+                      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                        <button disabled={busy} onClick={()=>{
+                          if(eff==="work"){
+                            saveShift(emp.id,date,"off");
+                          } else {
+                            const empObj=employees.find(e=>e.id===emp.id);
+                            const s=getScheduleForDate(date,empObj,gSch);
+                            const st=shift?.startTime||s?.startTime||gSch?.startTime||"08:00";
+                            const et=shift?.endTime  ||s?.endTime  ||gSch?.endTime  ||"20:00";
+                            saveShift(emp.id,date,"work",st,et);
+                          }
+                        }} style={{width:40,height:34,background:bg,color:col,border:`1.5px solid ${col}40`,borderRadius:9,fontSize:14,cursor:"pointer",position:"relative",transition:"all .15s"}}>
+                          {icon}
+                          {isOv&&<span style={{position:"absolute",top:-3,right:-3,width:7,height:7,background:"var(--yellow)",borderRadius:"50%",border:"1px solid var(--bg)"}}/>}
+                        </button>
+                        {isOv&&<button onClick={()=>saveShift(emp.id,date,"default")} disabled={busy} style={{background:"none",color:"var(--tx3)",border:"none",fontSize:9,cursor:"pointer",lineHeight:1}}>รีเซ็ต</button>}
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="card2" style={{padding:"11px 16px",marginTop:12,fontSize:12,color:"var(--tx2)",lineHeight:1.9}}>
+        <b style={{color:"var(--tx)"}}>วิธีใช้</b> — กดปุ่มเพื่อสลับสถานะ 🟢↔️⬜ · จุดสีเหลือง = ต่างจากตารางปกติ · กด "รีเซ็ต" เพื่อกลับค่าเดิม<br/>
+        ข้อมูลเก็บใน sheet <b>shifts</b> โดยอัตโนมัติ ใช้คำนวณสถานะ/OT ทุกวัน
+      </div>
+    </div>
+  );
+}
+
 // ─── Admin Panel ──────────────────────────────────────────────────────────────
-function AdminPanel({user,employees,records,location,gSch,clinic,onReloadAll,onReloadRec,onLogout,showToast}){
+function AdminPanel({user,employees,records,shifts,location,gSch,clinic,onReloadAll,onReloadRec,onLogout,showToast}){
   const[tab,setTab]=useState("overview");
   const[date,setDate]=useState(today());
   const[search,setSearch]=useState("");
@@ -1477,7 +1631,7 @@ function AdminPanel({user,employees,records,location,gSch,clinic,onReloadAll,onR
 
       {/* Tabs */}
       <div style={{display:"flex",gap:5,marginBottom:14,overflowX:"auto",paddingBottom:2}}>
-        {[["overview","📊","ภาพรวม"],["leaves","📋",`ใบลา${pendingLeaves.length>0?` (${pendingLeaves.length})`:""}`],["employees","👥","พนักงาน"],["location","📍","พิกัด"],["schedule","🕐","ตารางงาน"],["clinicinfo","🐾","คลินิค"]].map(([k,ic,lb])=>(
+        {[["overview","📊","ภาพรวม"],["leaves","📋",`ใบลา${pendingLeaves.length>0?` (${pendingLeaves.length})`:""}`],["employees","👥","พนักงาน"],["shifts","📅","สลับวันหยุด"],["location","📍","พิกัด"],["schedule","🕐","ตารางงาน"],["clinicinfo","🐾","คลินิค"]].map(([k,ic,lb])=>(
           <button key={k} onClick={()=>setTab(k)} style={{flex:"0 0 auto",padding:"8px 12px",background:tab===k?"var(--accBg)":"var(--card2)",color:tab===k?"var(--acc)":"var(--tx2)",border:`1px solid ${tab===k?"var(--acc)":"var(--br)"}`,borderRadius:10,fontSize:12,fontWeight:tab===k?700:400}}>{ic} {lb}</button>
         ))}
       </div>
@@ -1671,6 +1825,9 @@ function AdminPanel({user,employees,records,location,gSch,clinic,onReloadAll,onR
           </div>
         </div>
       )}
+
+      {/* SHIFTS — สลับวันหยุดรายสัปดาห์ */}
+      {tab==="shifts"&&<ShiftManager employees={employees.filter(e=>e.role!=="admin")} gSch={gSch} shifts={shifts} onReload={onReloadAll} showToast={showToast}/>}
 
       {/* LOCATION */}
       {tab==="location"&&(
