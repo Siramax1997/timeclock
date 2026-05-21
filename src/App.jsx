@@ -928,11 +928,9 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
     if(gps!=="ok"||busy||localCO||effectiveRec.checkOut) return;
     if(!effectiveRec.checkIn){ showToast(false,"กรุณาเช็คอินก่อน"); return; }
     // ⚠️ ยืนยันก่อนเช็คเอาท์
-    const confirmed = window.confirm(
-      `ยืนยันเช็คเอาท์ออกงาน?\n\n` +
-      `⏰ เวลาปัจจุบัน: ${new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit",timeZone:"Asia/Bangkok"})}` +
-      (onBreak ? `\n\n⚠️ คุณกำลังพักอยู่! กด "กลับมาแล้ว" ก่อนดีกว่า` : "")
-    );
+    const _ct = new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit",timeZone:"Asia/Bangkok"});
+    const _msg = "ยืนยันเช็คเอาท์ออกงาน?" + "\n\n" + "⏰ เวลาปัจจุบัน: " + _ct + (onBreak ? "\n\n⚠️ กำลังพักอยู่! กด กลับมาแล้ว ก่อนดีกว่า" : "");
+    const confirmed = window.confirm(_msg);
     if(!confirmed) return;
     setBusy(true);
     const time = nowISO();
@@ -1410,6 +1408,7 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
 function ShiftManager({ employees, gSch, shifts, onReload, showToast }) {
   const [weekOffset, setWeekOffset] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [swapNotes, setSwapNotes] = useState({}); // {"date|empId": "swapWithId"}
 
   const getWeekDates = (offset=0) => {
     const now = new Date();
@@ -1430,12 +1429,26 @@ function ShiftManager({ employees, gSch, shifts, onReload, showToast }) {
   const getShift    = (empId,date) => shifts.find(s=>s.empId===empId&&s.date===date)||null;
   const getDefType  = (empId,date) => { const emp=employees.find(e=>e.id===empId); const s=getScheduleForDate(date,emp,gSch); return s?"work":"off"; };
 
-  const saveShift = async (empId,date,type,startTime="",endTime="") => {
+  const saveShift = async (empId,date,type,startTime="",endTime="",note="") => {
     setBusy(true);
-    const r = await call("saveShift",{empId,date,type,startTime,endTime,note:""});
-    if(r.success){ await onReload(); showToast(true,type==="default"?"รีเซ็ตแล้ว":type==="off"?"🗓 วันหยุดแล้ว":"✅ มาทำงานแล้ว"); }
+    const r = await call("saveShift",{empId,date,type,startTime,endTime,note});
+    if(r.success){ await onReload(); showToast(true,type==="default"?"รีเซ็ตแล้ว":type==="off"?"🗓 บันทึกวันหยุดแล้ว":"✅ บันทึกวันทำงานแล้ว"); }
     else showToast(false,r.message);
     setBusy(false);
+  };
+
+  const exportShiftsCSV = () => {
+    const rows = [["สัปดาห์","วันที่","วัน","รหัสพนักงาน","ชื่อ","ประเภท","เวลาเข้า","เวลาออก","สลับกับ"]];
+    const DAY_TH_FULL = ["อาทิตย์","จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์","เสาร์"];
+    shifts.filter(s=>s.type!=="default").forEach(s=>{
+      const emp = employees.find(e=>e.id===s.empId);
+      const swapEmp = s.note ? employees.find(e=>e.id===s.note) : null;
+      const d = new Date(s.date+"T12:00:00");
+      rows.push([s.week, s.date, DAY_TH_FULL[d.getDay()], s.empId, emp?.name||"", s.type==="off"?"สลับหยุด":"สลับมาทำงาน", s.startTime||"", s.endTime||"", swapEmp?swapEmp.name:s.note||""]);
+    });
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(new Blob(["﻿"+rows.map(r=>r.join(",")).join("\n")],{type:"text/csv;charset=utf-8;"}));
+    a.download=`shifts_export.csv`; a.click();
   };
 
   const DAY_TH=["จ","อ","พ","พฤ","ศ","ส","อา"];
@@ -1460,6 +1473,38 @@ function ShiftManager({ employees, gSch, shifts, onReload, showToast }) {
           <span key={lb} className="pill" style={{background:bg,color:col,border:`1px solid ${col}30`,fontSize:11}}>{ic} {lb}</span>
         ))}
         <span style={{fontSize:11,color:"var(--tx3)",paddingTop:2}}>• จุดเหลือง = override จากปกติ</span>
+      </div>
+
+      {/* SwapWith selector + Export */}
+      <div className="card2" style={{padding:"12px 16px",marginBottom:12}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+          <div style={{fontSize:13,fontWeight:700,color:"var(--tx)"}}>ระบุคู่สลับ (ไม่บังคับ)</div>
+          <button onClick={exportShiftsCSV} style={{background:"var(--accBg)",color:"var(--acc)",border:"1px solid var(--acc)50",padding:"6px 14px",fontSize:12,fontWeight:700,borderRadius:9}}>⬇ Export CSV</button>
+        </div>
+        <div style={{fontSize:12,color:"var(--tx2)",marginBottom:10}}>เลือก "ใครสลับกับใคร" ก่อนกดปุ่มในตาราง เพื่อบันทึกคู่สลับใน CSV</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          {employees.map(emp=>(
+            <div key={emp.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",background:"var(--card2)",borderRadius:9}}>
+              <span style={{fontSize:14}}>{emp.avatar||"🐾"}</span>
+              <span style={{fontSize:12,color:"var(--tx)",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{emp.name}</span>
+              <select
+                value={""}
+                onChange={e=>{
+                  // Set swapNotes for all selected dates
+                  const partner = e.target.value;
+                  // We just store the preference - user then clicks the date cell
+                  showToast(true, `✅ ${emp.name} ↔ ${employees.find(x=>x.id===partner)?.name||partner}`);
+                }}
+                style={{width:90,padding:"3px 6px",fontSize:11,borderRadius:7,background:"var(--card)",border:"1px solid var(--br)",color:"var(--tx)"}}
+              >
+                <option value="">สลับกับ...</option>
+                {employees.filter(x=>x.id!==emp.id).map(x=>(
+                  <option key={x.id} value={x.id}>{x.avatar||"🐾"} {x.name}</option>
+                ))}
+              </select>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Grid table */}
@@ -1503,20 +1548,27 @@ function ShiftManager({ employees, gSch, shifts, onReload, showToast }) {
                     <td key={date} style={{textAlign:"center",padding:"6px 4px"}}>
                       <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
                         <button disabled={busy} onClick={()=>{
+                          const noteKey=`${date}|${emp.id}`;
+                          const swapWithId = swapNotes[noteKey]||"";
                           if(eff==="work"){
-                            saveShift(emp.id,date,"off");
+                            saveShift(emp.id,date,"off","","",swapWithId);
                           } else {
                             const empObj=employees.find(e=>e.id===emp.id);
-                            const s=getScheduleForDate(date,empObj,gSch);
-                            const st=shift?.startTime||s?.startTime||gSch?.startTime||"08:00";
-                            const et=shift?.endTime  ||s?.endTime  ||gSch?.endTime  ||"20:00";
-                            saveShift(emp.id,date,"work",st,et);
+                            const s2=getScheduleForDate(date,empObj,gSch);
+                            const st=shift?.startTime||s2?.startTime||gSch?.startTime||"08:00";
+                            const et=shift?.endTime  ||s2?.endTime  ||gSch?.endTime  ||"20:00";
+                            saveShift(emp.id,date,"work",st,et,swapWithId);
                           }
                         }} style={{width:40,height:34,background:bg,color:col,border:`1.5px solid ${col}40`,borderRadius:9,fontSize:14,cursor:"pointer",position:"relative",transition:"all .15s"}}>
                           {icon}
                           {isOv&&<span style={{position:"absolute",top:-3,right:-3,width:7,height:7,background:"var(--yellow)",borderRadius:"50%",border:"1px solid var(--bg)"}}/>}
                         </button>
-                        {isOv&&<button onClick={()=>saveShift(emp.id,date,"default")} disabled={busy} style={{background:"none",color:"var(--tx3)",border:"none",fontSize:9,cursor:"pointer",lineHeight:1}}>รีเซ็ต</button>}
+                        {isOv&&(
+                          <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                            <button onClick={()=>saveShift(emp.id,date,"default")} disabled={busy} style={{background:"none",color:"var(--tx3)",border:"none",fontSize:9,cursor:"pointer",lineHeight:1}}>รีเซ็ต</button>
+                            {shift?.note&&<span style={{fontSize:8,color:"var(--yellow)",maxWidth:40,textAlign:"center",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={`สลับกับ: ${employees.find(e=>e.id===shift.note)?.name||shift.note}`}>↔{employees.find(e=>e.id===shift.note)?.name||shift.note}</span>}
+                          </div>
+                        )}
                       </div>
                     </td>
                   );
@@ -1527,9 +1579,12 @@ function ShiftManager({ employees, gSch, shifts, onReload, showToast }) {
         </table>
       </div>
 
-      <div className="card2" style={{padding:"11px 16px",marginTop:12,fontSize:12,color:"var(--tx2)",lineHeight:1.9}}>
-        <b style={{color:"var(--tx)"}}>วิธีใช้</b> — กดปุ่มเพื่อสลับสถานะ 🟢↔️⬜ · จุดสีเหลือง = ต่างจากตารางปกติ · กด "รีเซ็ต" เพื่อกลับค่าเดิม<br/>
-        ข้อมูลเก็บใน sheet <b>shifts</b> โดยอัตโนมัติ ใช้คำนวณสถานะ/OT ทุกวัน
+      <div className="card2" style={{padding:"11px 16px",marginTop:12,fontSize:12,color:"var(--tx2)",lineHeight:2}}>
+        <b style={{color:"var(--tx)"}}>วิธีใช้</b><br/>
+        1. เลือก "สลับกับ" ของพนักงานที่ต้องการ (ถ้ามีคู่สลับ)<br/>
+        2. กดปุ่มในตารางเพื่อบันทึก 🟢↔️⬜<br/>
+        3. กด <b>⬇ Export CSV</b> เพื่อดาวน์โหลดตารางสลับพร้อมชื่อคู่สลับ<br/>
+        จุดสีเหลือง = ต่างจากตารางปกติ · ↔ ใต้ปุ่ม = ชื่อคู่สลับ · "รีเซ็ต" = กลับค่าเดิม
       </div>
     </div>
   );
@@ -1571,20 +1626,52 @@ function AdminPanel({user,employees,records,shifts,location,gSch,clinic,onReload
   const doDedup=async()=>{ setBusy(true);const r=await call("deduplicateRecords");r.success?(await onReloadRec(),showToast(true,`ล้างข้อมูลซ้ำ ${r.deleted} แถว`)):showToast(false,r.message);setBusy(false); };
   const doApproveLeave=async(date,empId,action)=>{ setBusy(true);const r=await call(action,{date,empId,approvedBy:user.id});r.success?(await onReloadRec(),showToast(true,action==="approveLeave"?"✓ อนุมัติแล้ว":"✗ ปฏิเสธแล้ว")):showToast(false,r.message);setBusy(false); };
   const doDeleteLeave=async(date,empId,empName)=>{
-    if(!window.confirm(`ลบใบลาของ ${empName} วันที่ ${date}?
-(ข้อมูลเช็คอิน/เอาท์จะยังคงอยู่)`)) return;
+    if(!window.confirm(`ลบใบลาของ ${empName} วันที่ ${date}? (ข้อมูลเช็คอิน/เอาท์จะยังคงอยู่)`)) return;
     setBusy(true);
     const r=await call("cancelLeave",{date,empId});
     r.success?(await onReloadRec(),showToast(true,"ลบใบลาแล้ว")):showToast(false,r.message||"ผิดพลาด");
     setBusy(false);
   };
   const exportAll=()=>{
-    const rows=[["วันที่","รหัส","ชื่อ","ตำแหน่ง","เข้างาน","ออกงาน","รวม","สถานะ","ใบลา","สถานะใบลา"]];
+    const rows=[["วันที่","รหัส","ชื่อ","แผนก/ตำแหน่ง","เข้างาน","ออกงาน","พัก(น.)","รวม(ชม.)","OT(ชม.)","สถานะงาน","ใบลา","สถานะใบลา","ตารางงานวันนั้น","สลับวันหยุด","หมายเหตุสลับ"]];
     Object.entries(records).sort((a,b)=>b[0].localeCompare(a[0])).forEach(([d,day])=>{
-      Object.entries(day).forEach(([eid,r])=>{ const e=employees.find(x=>x.id===eid);const s2=getScheduleForDate(d,e,gSch);const st=STATUS(r,s2);rows.push([d,eid,e?.name||"—",e?.position||"",ft(r.checkIn),ft(r.checkOut),hm(dm(r.checkIn,r.checkOut)),st.l,r.leaveType||"",r.leaveStatus||""]); });
+      Object.entries(day).forEach(([eid,r])=>{
+        const emp=employees.find(x=>x.id===eid);
+        const s2=getScheduleForDate(d,emp,gSch);
+        const st=STATUS(r,s2);
+        const otRes=calcOT(r.checkIn,r.checkOut,r.breakStart,r.breakEnd,s2);
+        const bm=dm(r.breakStart,r.breakEnd);
+        const shiftOv=shifts.find(s=>s.empId===eid&&s.date===d);
+        let shiftLabel="",shiftNote="";
+        if(shiftOv){
+          const dow=new Date(d+"T12:00:00").getDay();
+          const ws=emp?.weekSchedule;
+          const isDefWork=ws?ws[String(dow)]!==null&&ws[String(dow)]!==undefined:((gSch?.workDays||"1,2,3,4,5").split(",").map(Number).includes(dow));
+          if(shiftOv.type==="off"&&isDefWork){shiftLabel="🔴 สลับหยุด";shiftNote=shiftOv.note||"";}
+          else if(shiftOv.type==="work"&&!isDefWork){shiftLabel="🔄 สลับมาทำงาน";shiftNote=shiftOv.note||"";}
+        }
+        const schedLabel=s2?`${s2.startTime}-${s2.endTime}`:"หยุด";
+        rows.push([d,eid,emp?.name||"—",[emp?.position,emp?.department].filter(Boolean).join("/"),ft(r.checkIn),ft(r.checkOut),bm!=null?bm:"",otRes?hm(otRes.gross):"",otRes?.isOT?hm(otRes.ot):"",st.l,r.leaveType||"",r.leaveStatus||"",schedLabel,shiftLabel,shiftNote]);
+      });
     });
-    const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["\uFEFF"+rows.map(r=>r.join(",")).join("\n")],{type:"text/csv;charset=utf-8;"}));a.download=`att_all_${today()}.csv`;a.click();
+    const dl=v=>String(v).includes(",")?`"${v}"`:v;
+    const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["﻿"+rows.map(r=>r.map(dl).join(",")).join("\n")],{type:"text/csv;charset=utf-8;"}));a.download=`att_all_${today()}.csv`;a.click();
   };
+
+  const exportShifts=()=>{
+    const rows=[["สัปดาห์","วันที่","รหัส","ชื่อ","ตำแหน่ง","ประเภท","ตารางปกติ","เวลาเข้า","เวลาออก","หมายเหตุ"]];
+    [...shifts].sort((a,b)=>a.date.localeCompare(b.date)).forEach(s=>{
+      const emp=employees.find(e=>e.id===s.empId);
+      const typeLabel=s.type==="off"?"🔴 หยุดแทน":s.type==="work"?"🔄 มาทำงาน":"รีเซ็ต";
+      const dow=new Date(s.date+"T12:00:00").getDay();
+      const ws=emp?.weekSchedule;
+      const isDefWork=ws?ws[String(dow)]!==null&&ws[String(dow)]!==undefined:((gSch?.workDays||"1,2,3,4,5").split(",").map(Number).includes(dow));
+      const defLabel=isDefWork?"ทำงาน":"หยุด";
+      rows.push([s.week,s.date,s.empId,emp?.name||"—",emp?.position||"",typeLabel,defLabel,s.startTime||"",s.endTime||"",s.note||""]);
+    });
+    const dl=v=>String(v).includes(",")?`"${v}"`:v;
+    const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["﻿"+rows.map(r=>r.map(dl).join(",")).join("\n")],{type:"text/csv;charset=utf-8;"}));a.download=`shifts_${today()}.csv`;a.click();
+  };;
 
   const staff  = employees.filter(e=>e.role!=="admin");
   const dayRecs= records[date]||{};
@@ -1604,7 +1691,8 @@ function AdminPanel({user,employees,records,shifts,location,gSch,clinic,onReload
         <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
           <button onClick={doDedup} disabled={busy} style={{background:"var(--yellowBg)",color:"var(--yellow)",border:"1px solid var(--yellow)50",padding:"7px 12px",fontSize:11}}>🔧 ล้างข้อมูลซ้ำ</button>
           <button onClick={onReloadAll} style={{background:"var(--card2)",color:"var(--tx2)",border:"1px solid var(--br)",padding:"7px 12px",fontSize:12}}>🔄</button>
-          <button onClick={exportAll} style={{background:"var(--accBg)",color:"var(--acc)",border:"1px solid var(--acc)50",padding:"7px 14px",fontSize:12,fontWeight:700}}>⬇ CSV</button>
+          <button onClick={exportAll} style={{background:"var(--accBg)",color:"var(--acc)",border:"1px solid var(--acc)50",padding:"7px 14px",fontSize:12,fontWeight:700}}>⬇ CSV ทั้งหมด</button>
+          <button onClick={exportShifts} style={{background:"var(--yellowBg)",color:"var(--yellow)",border:"1px solid var(--yellow)50",padding:"7px 14px",fontSize:12,fontWeight:700}}>📅 CSV สลับวันหยุด</button>
           <button onClick={onLogout} style={{background:"var(--card2)",color:"var(--tx2)",border:"1px solid var(--br)",padding:"7px 12px",fontSize:12}}>ออก</button>
         </div>
       </div>
@@ -1631,7 +1719,7 @@ function AdminPanel({user,employees,records,shifts,location,gSch,clinic,onReload
 
       {/* Tabs */}
       <div style={{display:"flex",gap:5,marginBottom:14,overflowX:"auto",paddingBottom:2}}>
-        {[["overview","📊","ภาพรวม"],["leaves","📋",`ใบลา${pendingLeaves.length>0?` (${pendingLeaves.length})`:""}`],["employees","👥","พนักงาน"],["shifts","📅","สลับวันหยุด"],["location","📍","พิกัด"],["schedule","🕐","ตารางงาน"],["clinicinfo","🐾","คลินิค"]].map(([k,ic,lb])=>(
+        {[["overview","📊","ภาพรวม"],["leaves","📋","ใบลา"+(pendingLeaves.length>0?" ("+pendingLeaves.length+")":"")],["employees","👥","พนักงาน"],["shifts","📅","สลับวันหยุด"],["location","📍","พิกัด"],["schedule","🕐","ตารางงาน"],["clinicinfo","🐾","คลินิค"]].map(([k,ic,lb])=>(
           <button key={k} onClick={()=>setTab(k)} style={{flex:"0 0 auto",padding:"8px 12px",background:tab===k?"var(--accBg)":"var(--card2)",color:tab===k?"var(--acc)":"var(--tx2)",border:`1px solid ${tab===k?"var(--acc)":"var(--br)"}`,borderRadius:10,fontSize:12,fontWeight:tab===k?700:400}}>{ic} {lb}</button>
         ))}
       </div>
