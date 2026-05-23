@@ -230,6 +230,8 @@ const THEMES = [
   { id:"forest",    name:"ป่า 🌲",           emoji:"🌲", dark:true,  bg:"#071a12",bg2:"#0a2318",bg3:"#071510", card:"rgba(255,255,255,.07)",card2:"rgba(255,255,255,.1)",  br:"rgba(255,255,255,.1)",br2:"rgba(255,255,255,.16)", tx:"rgba(255,255,255,.94)",tx2:"rgba(255,255,255,.5)",tx3:"rgba(255,255,255,.25)", acc:"#34d399",acc2:"#2dd4bf", aB:"rgba(52,211,153,.14)",rB:"rgba(248,113,113,.13)",yB:"rgba(251,191,36,.13)",pB:"rgba(192,132,252,.13)",oB:"rgba(251,146,60,.13)", red:"#f87171",yellow:"#fbbf24",purple:"#c084fc",orange:"#fb923c" },
   { id:"ocean",     name:"ทะเล 🌊",          emoji:"🌊", dark:true,  bg:"#060f1f",bg2:"#0c1a35",bg3:"#08122a", card:"rgba(255,255,255,.07)",card2:"rgba(255,255,255,.1)",  br:"rgba(96,165,250,.15)",br2:"rgba(96,165,250,.25)", tx:"rgba(255,255,255,.94)",tx2:"rgba(255,255,255,.5)",tx3:"rgba(255,255,255,.25)", acc:"#38bdf8",acc2:"#67e8f9", aB:"rgba(56,189,248,.14)",rB:"rgba(248,113,113,.13)",yB:"rgba(251,191,36,.13)",pB:"rgba(192,132,252,.13)",oB:"rgba(251,146,60,.13)", red:"#f87171",yellow:"#fbbf24",purple:"#c084fc",orange:"#fb923c" },
   { id:"sakura",    name:"ซากุระ 🌸",        emoji:"🌸", dark:false, bg:"#fef2f8",bg2:"#fdf4ff",bg3:"#fff1f5", card:"rgba(255,255,255,.86)",card2:"rgba(255,255,255,.66)", br:"rgba(0,0,0,.08)",br2:"rgba(0,0,0,.13)", tx:"rgba(0,0,0,.82)",tx2:"rgba(0,0,0,.48)",tx3:"rgba(0,0,0,.27)", acc:"#db2777",acc2:"#9333ea", aB:"rgba(219,39,119,.11)",rB:"rgba(220,38,38,.09)",yB:"rgba(202,138,4,.1)",pB:"rgba(124,58,237,.1)",oB:"rgba(234,88,12,.1)", red:"#dc2626",yellow:"#ca8a04",purple:"#7c3aed",orange:"#ea580c" },
+  { id:"cyber",     name:"Cyber ⚡",            emoji:"⚡", dark:true,  bg:"#050505",bg2:"#0a0a0a",bg3:"#030303", card:"rgba(255,255,255,.05)",card2:"rgba(255,255,255,.08)", br:"rgba(0,255,200,.18)",br2:"rgba(0,255,200,.32)", tx:"rgba(255,255,255,.95)",tx2:"rgba(255,255,255,.55)",tx3:"rgba(255,255,255,.25)", acc:"#00ffc8",acc2:"#00e5ff", aB:"rgba(0,255,200,.15)",rB:"rgba(255,50,50,.15)",yB:"rgba(255,220,0,.15)",pB:"rgba(180,0,255,.15)",oB:"rgba(255,140,0,.15)", red:"#ff3232",yellow:"#ffd700",purple:"#b400ff",orange:"#ff8c00" },
+  { id:"cyberpunk", name:"Cyberpunk 🌆",         emoji:"🌆", dark:true,  bg:"#0d0015",bg2:"#120020",bg3:"#08000f", card:"rgba(255,255,255,.06)",card2:"rgba(255,255,255,.09)", br:"rgba(255,0,200,.2)",br2:"rgba(255,0,200,.35)",  tx:"rgba(255,255,255,.95)",tx2:"rgba(255,255,255,.55)",tx3:"rgba(255,255,255,.25)", acc:"#ff00cc",acc2:"#ffee00", aB:"rgba(255,0,200,.15)",rB:"rgba(255,50,50,.15)",yB:"rgba(255,220,0,.15)",pB:"rgba(200,0,255,.15)",oB:"rgba(255,140,0,.15)", red:"#ff3232",yellow:"#ffee00",purple:"#cc00ff",orange:"#ff6600" },
 ];
 const TV = t => ({
   "--bg":t.bg,"--bg2":t.bg2,"--bg3":t.bg3,
@@ -246,26 +248,93 @@ function AnimBG({ themeId }) {
   useEffect(() => { tRef.current = themeId; }, [themeId]);
   useEffect(() => {
     const c = cvs.current; if(!c) return;
-    const ctx = c.getContext("2d"); let W, H, items=[], raf;
+    const ctx = c.getContext("2d"); let W, H, items=[], grid=[], raf, frame=0;
     const EM=["🐶","🐱","🦁","🐯","🐼","🦊","🐰","🦮","🐈","🦄","🐮","🐺","🩺","💉","🩻","🩹","💊","🧬","🌿","🌱","🍃","🐾","🐾","🐾"];
-    const resize=()=>{W=c.width=window.innerWidth;H=c.height=window.innerHeight;};
+    const resize=()=>{
+      W=c.width=window.innerWidth;H=c.height=window.innerHeight;
+      // Rebuild grid for cyber themes
+      grid=[];
+      const cols=Math.ceil(W/60)+1, rows=Math.ceil(H/60)+1;
+      for(let r=0;r<rows;r++) for(let col=0;col<cols;col++) grid.push({x:col*60,y:r*60,opacity:Math.random()*.15,speed:0.002+Math.random()*.006,phase:Math.random()*Math.PI*2});
+    };
     resize(); window.addEventListener("resize",resize);
     for(let i=0;i<36;i++) items.push({x:Math.random()*1200,y:Math.random()*800,vx:(Math.random()-.5)*.4,vy:(Math.random()-.5)*.35,a:Math.random()*Math.PI*2,va:(Math.random()-.5)*.01,s:16+Math.random()*22,op:0.04+Math.random()*.11,ch:EM[Math.floor(Math.random()*EM.length)],bo:Math.random()*Math.PI*2,bs:0.018+Math.random()*.025});
     const draw=()=>{
+      frame++;
       ctx.clearRect(0,0,W,H);
       const th=THEMES.find(x=>x.id===tRef.current)||THEMES[0];
+      const isCyber = th.id==="cyber"||th.id==="cyberpunk";
+      // Background gradient
       const g=ctx.createLinearGradient(0,0,W,H);
       g.addColorStop(0,th.bg);g.addColorStop(.5,th.bg2);g.addColorStop(1,th.bg3);
       ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
-      items.forEach(p=>{
-        p.x+=p.vx;p.y+=p.vy+Math.sin(p.bo)*.2;p.a+=p.va;p.bo+=p.bs;
-        if(p.x<-70)p.x=W+50;if(p.x>W+70)p.x=-50;
-        if(p.y<-70)p.y=H+50;if(p.y>H+70)p.y=-50;
-        ctx.save();ctx.globalAlpha=th.dark?p.op:p.op*.6;
-        ctx.translate(p.x,p.y);ctx.rotate(p.a);
-        ctx.font=`${p.s}px serif`;ctx.textAlign="center";ctx.textBaseline="middle";
-        ctx.fillText(p.ch,0,0);ctx.restore();
-      });
+
+      if(isCyber) {
+        // === CYBER BG: scanlines + grid + floating code chars ===
+        const accentCol = th.id==="cyberpunk" ? "255,0,200" : "0,255,200";
+        const accentCol2 = th.id==="cyberpunk" ? "255,230,0" : "0,200,255";
+
+        // Grid dots
+        grid.forEach(p=>{
+          p.phase+=p.speed;
+          const op = (Math.sin(p.phase)+1)/2 * 0.12;
+          ctx.beginPath();
+          ctx.arc(p.x,p.y,1.2,0,Math.PI*2);
+          ctx.fillStyle = "rgba("+accentCol+","+op+")";
+          ctx.fill();
+        });
+
+        // Scanlines
+        for(let y=0;y<H;y+=4){
+          ctx.fillStyle = "rgba(0,0,0,0.06)";
+          ctx.fillRect(0,y,W,2);
+        }
+
+        // Floating cyber chars (binary/symbols)
+        const CYBER_CHARS = ["0","1","⬡","◈","⚡","▸","◼","⬢","//","{}","</>","01","10","⌬","△","▲","◆","║","═","╬"];
+        items.forEach(p=>{
+          p.x+=p.vx*.6; p.y+=p.vy*.6+Math.sin(p.bo)*.15; p.a+=p.va*.5; p.bo+=p.bs;
+          if(p.x<-80)p.x=W+60; if(p.x>W+80)p.x=-60;
+          if(p.y<-80)p.y=H+60; if(p.y>H+80)p.y=-60;
+          ctx.save();
+          ctx.globalAlpha = 0.06+Math.sin(p.bo)*0.04;
+          ctx.translate(p.x,p.y); ctx.rotate(p.a);
+          ctx.font = `${p.s*0.8}px 'JetBrains Mono',monospace`;
+          ctx.textAlign="center"; ctx.textBaseline="middle";
+          const useSecond = Math.sin(p.phase||0)>0;
+          ctx.fillStyle = useSecond ? "rgba("+accentCol2+",1)" : "rgba("+accentCol+",1)";
+          ctx.fillText(CYBER_CHARS[Math.floor(p.s*3)%CYBER_CHARS.length],0,0);
+          ctx.restore();
+        });
+
+        // Horizontal neon scan line that moves down
+        const scanY = (frame*0.8) % (H+100) - 50;
+        const scanGrad = ctx.createLinearGradient(0,scanY-30,0,scanY+30);
+        scanGrad.addColorStop(0,"rgba("+accentCol+",0)");
+        scanGrad.addColorStop(0.5,"rgba("+accentCol+",0.08)");
+        scanGrad.addColorStop(1,"rgba("+accentCol+",0)");
+        ctx.fillStyle=scanGrad; ctx.fillRect(0,scanY-30,W,60);
+
+        // Corner brackets decoration
+        const bSize=40, bOp=0.15;
+        ctx.strokeStyle="rgba("+accentCol+","+bOp+")"; ctx.lineWidth=1.5;
+        [[20,20],[W-20,20],[20,H-20],[W-20,H-20]].forEach(([cx,cy])=>{
+          const sx=cx<W/2?1:-1, sy=cy<H/2?1:-1;
+          ctx.beginPath(); ctx.moveTo(cx,cy+sy*bSize); ctx.lineTo(cx,cy); ctx.lineTo(cx+sx*bSize,cy); ctx.stroke();
+        });
+
+      } else {
+        // Normal animal emoji float
+        items.forEach(p=>{
+          p.x+=p.vx;p.y+=p.vy+Math.sin(p.bo)*.2;p.a+=p.va;p.bo+=p.bs;
+          if(p.x<-70)p.x=W+50; if(p.x>W+70)p.x=-50;
+          if(p.y<-70)p.y=H+50; if(p.y>H+70)p.y=-50;
+          ctx.save();ctx.globalAlpha=th.dark?p.op:p.op*.6;
+          ctx.translate(p.x,p.y);ctx.rotate(p.a);
+          ctx.font=`${p.s}px serif`;ctx.textAlign="center";ctx.textBaseline="middle";
+          ctx.fillText(p.ch,0,0);ctx.restore();
+        });
+      }
       raf=requestAnimationFrame(draw);
     };
     draw();
