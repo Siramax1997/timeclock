@@ -727,6 +727,112 @@ function PublicBoard({ employees, records, gSch, clinic, onLogin }) {
   );
 }
 
+
+// ─── Cat Peeks on Login Card ──────────────────────────────────────────────────
+function CatPeek({ side="right" }) {
+  // White/grey tabby cat with blue eyes — based on the clinic's cat
+  const flip = side === "left";
+  return (
+    <div style={{
+      position:"absolute",
+      top: -72,
+      [flip?"left":"right"]: flip ? 18 : 18,
+      width: 90, height: 100,
+      zIndex: 10,
+      transform: flip ? "scaleX(-1)" : "none",
+      pointerEvents: "none",
+      filter: "drop-shadow(0 4px 12px rgba(0,0,0,.25))",
+    }}>
+      <svg viewBox="0 0 90 100" xmlns="http://www.w3.org/2000/svg" width="90" height="100">
+        {/* Body/chest peeking over edge */}
+        <ellipse cx="45" cy="85" rx="28" ry="18" fill="#e8e0d5"/>
+        <ellipse cx="45" cy="82" rx="22" ry="15" fill="#f5f0ea"/>
+        {/* Chest white patch */}
+        <ellipse cx="45" cy="80" rx="14" ry="12" fill="#ffffff" opacity="0.9"/>
+
+        {/* Paws gripping the edge */}
+        {/* Left paw */}
+        <ellipse cx="24" cy="92" rx="9" ry="6" fill="#e0d8cc"/>
+        <ellipse cx="20" cy="90" rx="5" ry="4" fill="#d4ccc0"/>
+        {/* Left paw toes */}
+        <ellipse cx="17" cy="88" rx="2.5" ry="2" fill="#c8bfb2"/>
+        <ellipse cx="20" cy="86" rx="2.5" ry="2" fill="#c8bfb2"/>
+        <ellipse cx="23" cy="87" rx="2.5" ry="2" fill="#c8bfb2"/>
+        {/* Right paw */}
+        <ellipse cx="66" cy="92" rx="9" ry="6" fill="#e0d8cc"/>
+        <ellipse cx="70" cy="90" rx="5" ry="4" fill="#d4ccc0"/>
+        {/* Right paw toes */}
+        <ellipse cx="73" cy="88" rx="2.5" ry="2" fill="#c8bfb2"/>
+        <ellipse cx="70" cy="86" rx="2.5" ry="2" fill="#c8bfb2"/>
+        <ellipse cx="67" cy="87" rx="2.5" ry="2" fill="#c8bfb2"/>
+
+        {/* Head */}
+        <ellipse cx="45" cy="50" rx="26" ry="28" fill="#e8e0d5"/>
+
+        {/* Tabby stripes on head - grey markings */}
+        <path d="M32 30 Q35 24 38 30" stroke="#c0b8aa" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
+        <path d="M42 27 Q45 21 48 27" stroke="#c0b8aa" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
+        <path d="M52 30 Q55 24 58 30" stroke="#c0b8aa" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
+
+        {/* Forehead M mark */}
+        <path d="M38 38 Q42 34 45 38 Q48 34 52 38" stroke="#b8b0a0" strokeWidth="1.8" fill="none" strokeLinecap="round"/>
+
+        {/* Ears */}
+        <polygon points="22,36 14,18 34,28" fill="#ddd5c8"/>
+        <polygon points="22,36 17,22 31,28" fill="#f0b8b0" opacity="0.7"/>
+        <polygon points="68,36 76,18 56,28" fill="#ddd5c8"/>
+        <polygon points="68,36 73,22 59,28" fill="#f0b8b0" opacity="0.7"/>
+
+        {/* Face white area */}
+        <ellipse cx="45" cy="58" rx="18" ry="16" fill="#ffffff" opacity="0.55"/>
+
+        {/* Eyes — big blue */}
+        <ellipse cx="35" cy="50" rx="8.5" ry="9" fill="#d0e8f0"/>
+        <ellipse cx="55" cy="50" rx="8.5" ry="9" fill="#d0e8f0"/>
+        {/* Eye iris */}
+        <ellipse cx="35" cy="51" rx="6.5" ry="7.5" fill="#7ec8e0"/>
+        <ellipse cx="55" cy="51" rx="6.5" ry="7.5" fill="#7ec8e0"/>
+        {/* Pupils */}
+        <ellipse cx="35" cy="52" rx="3.5" ry="5.5" fill="#1a1a2e"/>
+        <ellipse cx="55" cy="52" rx="3.5" ry="5.5" fill="#1a1a2e"/>
+        {/* Eye shine */}
+        <circle cx="37" cy="48" r="1.8" fill="white" opacity="0.9"/>
+        <circle cx="57" cy="48" r="1.8" fill="white" opacity="0.9"/>
+        <circle cx="34" cy="54" r="0.9" fill="white" opacity="0.5"/>
+        <circle cx="54" cy="54" r="0.9" fill="white" opacity="0.5"/>
+        {/* Eye outline */}
+        <ellipse cx="35" cy="50" rx="8.5" ry="9" fill="none" stroke="#a0b8c0" strokeWidth="0.8"/>
+        <ellipse cx="55" cy="50" rx="8.5" ry="9" fill="none" stroke="#a0b8c0" strokeWidth="0.8"/>
+
+        {/* Nose */}
+        <path d="M43 62 L45 64.5 L47 62 Q45 60.5 43 62Z" fill="#f4a0a0"/>
+        {/* Mouth */}
+        <path d="M45 64.5 Q42 67 40 66" stroke="#c08080" strokeWidth="1.2" fill="none" strokeLinecap="round"/>
+        <path d="M45 64.5 Q48 67 50 66" stroke="#c08080" strokeWidth="1.2" fill="none" strokeLinecap="round"/>
+
+        {/* Whiskers */}
+        <line x1="20" y1="61" x2="40" y2="63" stroke="#a0a0a0" strokeWidth="0.9" opacity="0.7"/>
+        <line x1="19" y1="64" x2="39" y2="64.5" stroke="#a0a0a0" strokeWidth="0.9" opacity="0.7"/>
+        <line x1="20" y1="67" x2="40" y2="66" stroke="#a0a0a0" strokeWidth="0.9" opacity="0.7"/>
+        <line x1="70" y1="61" x2="50" y2="63" stroke="#a0a0a0" strokeWidth="0.9" opacity="0.7"/>
+        <line x1="71" y1="64" x2="51" y2="64.5" stroke="#a0a0a0" strokeWidth="0.9" opacity="0.7"/>
+        <line x1="70" y1="67" x2="50" y2="66" stroke="#a0a0a0" strokeWidth="0.9" opacity="0.7"/>
+
+        {/* Tabby stripe marks on cheeks */}
+        <path d="M22 54 Q26 52 28 56" stroke="#c0b8a8" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+        <path d="M23 58 Q27 57 28 60" stroke="#c0b8a8" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+        <path d="M68 54 Q64 52 62 56" stroke="#c0b8a8" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+        <path d="M67 58 Q63 57 62 60" stroke="#c0b8a8" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+
+        {/* Bell on collar (barely visible peeking) */}
+        <circle cx="45" cy="76" r="3.5" fill="#d4a820" opacity="0.7"/>
+        <circle cx="45" cy="77" r="1.5" fill="#a07010" opacity="0.6"/>
+      </svg>
+    </div>
+  );
+}
+
+
 // ─── Login ────────────────────────────────────────────────────────────────────
 function Login({employees,err,clinic,onLogin,onRetry,onBoard}){
   const SK_ID  = "tv_id";
@@ -798,7 +904,9 @@ function Login({employees,err,clinic,onLogin,onRetry,onBoard}){
           <div style={{color:"var(--tx2)",fontSize:12,marginTop:6}}>{now.toLocaleDateString("th-TH",{weekday:"long",day:"numeric",month:"long",year:"numeric",timeZone:"Asia/Bangkok"})}</div>
         </div>
 
-        <div className="card" style={{padding:"26px 26px 22px"}}>
+        <div className="card" style={{padding:"26px 26px 22px",position:"relative",overflow:"visible",marginTop:24}}>
+          <CatPeek/>
+          <CatPeek side="right"/>
           {err&&<div style={{background:"var(--redBg)",border:"1px solid var(--red)",borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:12,color:"var(--red)",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
             <span>⚠ {err}</span>
             <button onClick={onRetry} style={{background:"none",color:"var(--acc)",border:"1px solid var(--acc)",padding:"3px 10px",fontSize:11,borderRadius:7,flexShrink:0}}>ลองใหม่</button>
