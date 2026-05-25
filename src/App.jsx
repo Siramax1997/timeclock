@@ -617,6 +617,7 @@ export default function App() {
       <style>{CSS}</style><AnimBG themeId={themeId}/>
       <Toast msg={toast}/>
       <ThemeSwitcher current={themeId} onChange={changeTheme}/>
+      <CatWalker/>
       <div style={{position:"relative",zIndex:1}}>
         {view==="board" && <PublicBoard employees={employees} records={records} gSch={gSch} clinic={clinic} onLogin={()=>setView("login")}/>}
         {view==="login" && <Login employees={employees} err={err} clinic={clinic} onLogin={login} onRetry={loadAll} onBoard={()=>setView("board")}/>}
@@ -728,106 +729,312 @@ function PublicBoard({ employees, records, gSch, clinic, onLogin }) {
 }
 
 
-// ─── Cat Peeks on Login Card ──────────────────────────────────────────────────
-function CatPeek({ side="right" }) {
-  // White/grey tabby cat with blue eyes — based on the clinic's cat
-  const flip = side === "left";
+// ─── Cat System (walking + login peek) ────────────────────────────────────────
+const CAT_CSS = `
+@keyframes catWalk    { 0%,100%{transform:translateY(0px)} 25%{transform:translateY(-4px)} 75%{transform:translateY(-2px)} }
+@keyframes tailSwing  { 0%{transform:rotate(-35deg)} 50%{transform:rotate(30deg)} 100%{transform:rotate(-35deg)} }
+@keyframes tailPeek   { 0%{transform:rotate(-12deg)} 50%{transform:rotate(14deg)} 100%{transform:rotate(-12deg)} }
+@keyframes legF1      { 0%,100%{transform:rotate(-22deg)} 50%{transform:rotate(30deg)} }
+@keyframes legB1      { 0%,100%{transform:rotate(22deg)}  50%{transform:rotate(-28deg)} }
+@keyframes legF2      { 0%,100%{transform:rotate(30deg)}  50%{transform:rotate(-22deg)} }
+@keyframes legB2      { 0%,100%{transform:rotate(-28deg)} 50%{transform:rotate(22deg)} }
+@keyframes blink      { 0%,88%,100%{transform:scaleY(1)} 93%{transform:scaleY(0.06)} }
+@keyframes breathe    { 0%,100%{transform:scaleX(1) scaleY(1)} 50%{transform:scaleX(1.03) scaleY(0.97)} }
+@keyframes shadowPulse{ 0%,100%{transform:scaleX(1);opacity:.15} 50%{transform:scaleX(.82);opacity:.09} }
+@keyframes earTwitch  { 0%,85%,100%{transform:rotate(0deg)} 90%{transform:rotate(-12deg)} 95%{transform:rotate(8deg)} }
+.cat-walk  { animation: catWalk 0.35s ease-in-out infinite; }
+.cat-tail  { transform-origin: 0px 0px; animation: tailSwing 1.3s ease-in-out infinite; }
+.cat-tailp { transform-origin: 50% 100%; animation: tailPeek 1.8s ease-in-out infinite; }
+.cat-lf1   { transform-origin: 50% 0%; animation: legF1 0.35s ease-in-out infinite; }
+.cat-lb1   { transform-origin: 50% 0%; animation: legB1 0.35s ease-in-out infinite; }
+.cat-lf2   { transform-origin: 50% 0%; animation: legF2 0.35s ease-in-out infinite; }
+.cat-lb2   { transform-origin: 50% 0%; animation: legB2 0.35s ease-in-out infinite; }
+.cat-eye   { transform-origin: 50% 50%; animation: blink 4.5s ease-in-out infinite; }
+.cat-body  { transform-origin: 50% 50%; animation: breathe 2.5s ease-in-out infinite; }
+.cat-shadow{ transform-origin: 50% 50%; animation: shadowPulse .35s ease-in-out infinite; }
+.cat-ear   { transform-origin: 50% 100%; animation: earTwitch 6s ease-in-out infinite; }
+`;
+
+// ── Detailed side-view cat SVG (matches gray/white tabby in photo) ─────────────
+function CatBodySVG({ size=100, walking=true }) {
+  const s = size / 100;
   return (
-    <div style={{
-      position:"absolute",
-      top: -72,
-      [flip?"left":"right"]: flip ? 18 : 18,
-      width: 90, height: 100,
-      zIndex: 10,
-      transform: flip ? "scaleX(-1)" : "none",
-      pointerEvents: "none",
-      filter: "drop-shadow(0 4px 12px rgba(0,0,0,.25))",
-    }}>
-      <svg viewBox="0 0 90 100" xmlns="http://www.w3.org/2000/svg" width="90" height="100">
-        {/* Body/chest peeking over edge */}
-        <ellipse cx="45" cy="85" rx="28" ry="18" fill="#e8e0d5"/>
-        <ellipse cx="45" cy="82" rx="22" ry="15" fill="#f5f0ea"/>
-        {/* Chest white patch */}
-        <ellipse cx="45" cy="80" rx="14" ry="12" fill="#ffffff" opacity="0.9"/>
+    <div style={{width:size, height:size*1.25, position:"relative"}}>
+      <style>{CAT_CSS}</style>
+      <svg viewBox="0 0 100 125" xmlns="http://www.w3.org/2000/svg"
+        width={size} height={size*1.25} style={{overflow:"visible"}}>
 
-        {/* Paws gripping the edge */}
-        {/* Left paw */}
-        <ellipse cx="24" cy="92" rx="9" ry="6" fill="#e0d8cc"/>
-        <ellipse cx="20" cy="90" rx="5" ry="4" fill="#d4ccc0"/>
-        {/* Left paw toes */}
-        <ellipse cx="17" cy="88" rx="2.5" ry="2" fill="#c8bfb2"/>
-        <ellipse cx="20" cy="86" rx="2.5" ry="2" fill="#c8bfb2"/>
-        <ellipse cx="23" cy="87" rx="2.5" ry="2" fill="#c8bfb2"/>
-        {/* Right paw */}
-        <ellipse cx="66" cy="92" rx="9" ry="6" fill="#e0d8cc"/>
-        <ellipse cx="70" cy="90" rx="5" ry="4" fill="#d4ccc0"/>
-        {/* Right paw toes */}
-        <ellipse cx="73" cy="88" rx="2.5" ry="2" fill="#c8bfb2"/>
-        <ellipse cx="70" cy="86" rx="2.5" ry="2" fill="#c8bfb2"/>
-        <ellipse cx="67" cy="87" rx="2.5" ry="2" fill="#c8bfb2"/>
+        {/* Shadow */}
+        <ellipse cx="50" cy="120" rx="24" ry="5.5" fill="rgba(0,0,0,.2)"
+          className={walking?"cat-shadow":""} style={{transformOrigin:"50px 120px"}}/>
 
-        {/* Head */}
-        <ellipse cx="45" cy="50" rx="26" ry="28" fill="#e8e0d5"/>
+        {/* ── BACK LEGS ── */}
+        <g className={walking?"cat-lb1":""} style={{transformOrigin:"64px 88px"}}>
+          {/* Thigh */}
+          <ellipse cx="65" cy="87" rx="8" ry="10" fill="#b0a898"/>
+          {/* Lower leg */}
+          <rect x="60" y="92" width="9" height="20" rx="4.5" fill="#b8b0a0"/>
+          {/* Paw — white */}
+          <ellipse cx="64" cy="113" rx="8" ry="5" fill="#f0ede6"/>
+          <ellipse cx="64" cy="111" rx="6" ry="3.5" fill="#f8f5ee"/>
+          <line x1="59" y1="113" x2="59" y2="117" stroke="#d8d4cc" strokeWidth="0.9"/>
+          <line x1="62" y1="114" x2="62" y2="118" stroke="#d8d4cc" strokeWidth="0.9"/>
+          <line x1="65" y1="115" x2="65" y2="119" stroke="#d8d4cc" strokeWidth="0.9"/>
+          <line x1="68" y1="114" x2="68" y2="118" stroke="#d8d4cc" strokeWidth="0.9"/>
+        </g>
+        <g className={walking?"cat-lb2":""} style={{transformOrigin:"36px 88px"}}>
+          <ellipse cx="36" cy="87" rx="8" ry="10" fill="#c8c0b0"/>
+          <rect x="31" y="92" width="9" height="20" rx="4.5" fill="#d0c8b8"/>
+          <ellipse cx="36" cy="113" rx="8" ry="5" fill="#f8f5ee"/>
+          <ellipse cx="36" cy="111" rx="6" ry="3.5" fill="#fffcf5"/>
+          <line x1="31" y1="113" x2="31" y2="117" stroke="#e0dcd4" strokeWidth="0.9"/>
+          <line x1="34" y1="114" x2="34" y2="118" stroke="#e0dcd4" strokeWidth="0.9"/>
+          <line x1="37" y1="115" x2="37" y2="119" stroke="#e0dcd4" strokeWidth="0.9"/>
+          <line x1="40" y1="114" x2="40" y2="118" stroke="#e0dcd4" strokeWidth="0.9"/>
+        </g>
 
-        {/* Tabby stripes on head - grey markings */}
-        <path d="M32 30 Q35 24 38 30" stroke="#c0b8aa" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
-        <path d="M42 27 Q45 21 48 27" stroke="#c0b8aa" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
-        <path d="M52 30 Q55 24 58 30" stroke="#c0b8aa" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
+        {/* ── TAIL — dark ringed, very distinctive on Momo ── */}
+        <g className={walking?"cat-tail":""} style={{transformOrigin:"76px 90px"}}>
+          {/* Base */}
+          <path d="M76 90 Q96 78 92 58 Q89 43 80 38"
+            stroke="#908880" strokeWidth="11" strokeLinecap="round" fill="none"/>
+          {/* Mid color */}
+          <path d="M76 90 Q96 78 92 58 Q89 43 80 38"
+            stroke="#a09888" strokeWidth="8" strokeLinecap="round" fill="none"/>
+          {/* Ring stripes — dark bands like Momo */}
+          <path d="M84 82 Q90 77 88 70" stroke="#706860" strokeWidth="4"
+            strokeLinecap="round" fill="none" opacity="0.7"/>
+          <path d="M88 68 Q92 63 90 56" stroke="#706860" strokeWidth="4"
+            strokeLinecap="round" fill="none" opacity="0.7"/>
+          <path d="M89 52 Q90 46 85 41" stroke="#706860" strokeWidth="4"
+            strokeLinecap="round" fill="none" opacity="0.7"/>
+          {/* Tail tip — darker like Momo */}
+          <ellipse cx="79" cy="36" rx="6" ry="7" fill="#605850"
+            transform="rotate(-15 79 36)"/>
+          <ellipse cx="79" cy="36" rx="4" ry="5" fill="#807060"
+            transform="rotate(-15 79 36)"/>
+        </g>
 
-        {/* Forehead M mark */}
-        <path d="M38 38 Q42 34 45 38 Q48 34 52 38" stroke="#b8b0a0" strokeWidth="1.8" fill="none" strokeLinecap="round"/>
+        {/* ── BODY — chubby British Shorthair ── */}
+        <g className={walking?"cat-body":""} style={{transformOrigin:"50px 82px"}}>
+          {/* Back/top — gray-lilac */}
+          <ellipse cx="50" cy="80" rx="28" ry="24" fill="#b8b0a0"/>
+          <ellipse cx="50" cy="74" rx="24" ry="18" fill="#c8c0b0"/>
+          {/* Subtle tabby marks on back */}
+          <path d="M28 76 Q32 70 36 76" stroke="#a09888" strokeWidth="2.2" fill="none"
+            strokeLinecap="round" opacity="0.55"/>
+          <path d="M29 84 Q33 78 37 84" stroke="#a09888" strokeWidth="1.8" fill="none"
+            strokeLinecap="round" opacity="0.4"/>
+          <path d="M64 76 Q68 70 72 76" stroke="#a09888" strokeWidth="2.2" fill="none"
+            strokeLinecap="round" opacity="0.55"/>
+          <path d="M63 84 Q67 78 71 84" stroke="#a09888" strokeWidth="1.8" fill="none"
+            strokeLinecap="round" opacity="0.4"/>
+          {/* White belly — large on Momo */}
+          <ellipse cx="50" cy="86" rx="18" ry="16" fill="#f8f5ee"/>
+          <ellipse cx="50" cy="89" rx="14" ry="12" fill="#fffcf5"/>
+        </g>
 
-        {/* Ears */}
-        <polygon points="22,36 14,18 34,28" fill="#ddd5c8"/>
-        <polygon points="22,36 17,22 31,28" fill="#f0b8b0" opacity="0.7"/>
-        <polygon points="68,36 76,18 56,28" fill="#ddd5c8"/>
-        <polygon points="68,36 73,22 59,28" fill="#f0b8b0" opacity="0.7"/>
+        {/* ── FRONT LEGS ── */}
+        <g className={walking?"cat-lf1":""} style={{transformOrigin:"38px 92px"}}>
+          <ellipse cx="37" cy="91" rx="7" ry="9" fill="#c8c0b0"/>
+          <rect x="31" y="96" width="10" height="22" rx="5" fill="#d0c8b8"/>
+          <ellipse cx="36" cy="118" rx="9" ry="5" fill="#f8f5ee"/>
+          <ellipse cx="36" cy="116" rx="7" ry="3.5" fill="#fffcf5"/>
+          <line x1="30" y1="117" x2="30" y2="122" stroke="#e0dcd4" strokeWidth="1"/>
+          <line x1="33" y1="118" x2="33" y2="123" stroke="#e0dcd4" strokeWidth="1"/>
+          <line x1="36" y1="119" x2="36" y2="124" stroke="#e0dcd4" strokeWidth="1"/>
+          <line x1="39" y1="118" x2="39" y2="123" stroke="#e0dcd4" strokeWidth="1"/>
+          <line x1="42" y1="117" x2="42" y2="122" stroke="#e0dcd4" strokeWidth="1"/>
+        </g>
+        <g className={walking?"cat-lf2":""} style={{transformOrigin:"62px 92px"}}>
+          <ellipse cx="63" cy="91" rx="7" ry="9" fill="#b8b0a0"/>
+          <rect x="59" y="96" width="10" height="22" rx="5" fill="#c0b8a8"/>
+          <ellipse cx="64" cy="118" rx="9" ry="5" fill="#f0ede6"/>
+          <ellipse cx="64" cy="116" rx="7" ry="3.5" fill="#f8f5ee"/>
+          <line x1="58" y1="117" x2="58" y2="122" stroke="#d8d4cc" strokeWidth="1"/>
+          <line x1="61" y1="118" x2="61" y2="123" stroke="#d8d4cc" strokeWidth="1"/>
+          <line x1="64" y1="119" x2="64" y2="124" stroke="#d8d4cc" strokeWidth="1"/>
+          <line x1="67" y1="118" x2="67" y2="123" stroke="#d8d4cc" strokeWidth="1"/>
+          <line x1="70" y1="117" x2="70" y2="122" stroke="#d8d4cc" strokeWidth="1"/>
+        </g>
 
-        {/* Face white area */}
-        <ellipse cx="45" cy="58" rx="18" ry="16" fill="#ffffff" opacity="0.55"/>
+        {/* ── NECK ── */}
+        <ellipse cx="50" cy="63" rx="15" ry="11" fill="#c0b8a8"/>
+        <ellipse cx="50" cy="61" rx="12" ry="8" fill="#ccc4b4"/>
+        {/* White chest */}
+        <ellipse cx="50" cy="65" rx="9" ry="7" fill="#f8f5ee" opacity="0.7"/>
 
-        {/* Eyes — big blue */}
-        <ellipse cx="35" cy="50" rx="8.5" ry="9" fill="#d0e8f0"/>
-        <ellipse cx="55" cy="50" rx="8.5" ry="9" fill="#d0e8f0"/>
-        {/* Eye iris */}
-        <ellipse cx="35" cy="51" rx="6.5" ry="7.5" fill="#7ec8e0"/>
-        <ellipse cx="55" cy="51" rx="6.5" ry="7.5" fill="#7ec8e0"/>
-        {/* Pupils */}
-        <ellipse cx="35" cy="52" rx="3.5" ry="5.5" fill="#1a1a2e"/>
-        <ellipse cx="55" cy="52" rx="3.5" ry="5.5" fill="#1a1a2e"/>
+        {/* ── HEAD — round British Shorthair style ── */}
+        {/* Head base */}
+        <circle cx="50" cy="38" r="26" fill="#bab2a2"/>
+        {/* Top of head lighter */}
+        <ellipse cx="50" cy="30" rx="20" ry="15" fill="#cac2b2"/>
+        {/* Side shading */}
+        <ellipse cx="30" cy="40" rx="8" ry="13" fill="#a8a098" opacity="0.35"/>
+        <ellipse cx="70" cy="40" rx="8" ry="13" fill="#a8a098" opacity="0.35"/>
+
+        {/* Head tabby spots/dots — no M stripe */}
+        <circle cx="42" cy="24" r="3" fill="#a09888" opacity="0.4"/>
+        <circle cx="50" cy="21" r="3.5" fill="#a09888" opacity="0.35"/>
+        <circle cx="58" cy="24" r="3" fill="#a09888" opacity="0.4"/>
+
+        {/* ── EARS ── */}
+        <g className="cat-ear" style={{transformOrigin:"28px 22px"}}>
+          <polygon points="20,36 10,8 36,24" fill="#b0a898"/>
+          <polygon points="21,34 14,12 33,24" fill="#f5c0c8"/>
+          <path d="M12 10 Q16 5 20 10" stroke="#ccc4b4" strokeWidth="1.5" fill="none"/>
+        </g>
+        <g className="cat-ear" style={{transformOrigin:"72px 22px",animationDelay:"0.35s"}}>
+          <polygon points="80,36 90,8 64,24" fill="#b0a898"/>
+          <polygon points="79,34 86,12 67,24" fill="#f5c0c8"/>
+          <path d="M80 10 Q84 5 88 10" stroke="#ccc4b4" strokeWidth="1.5" fill="none"/>
+        </g>
+
+        {/* ── WHITE FACE MASK — large on Momo ── */}
+        {/* Cheeks very puffy */}
+        <ellipse cx="26" cy="48" rx="11" ry="10" fill="#f5f2eb" opacity="0.7"/>
+        <ellipse cx="74" cy="48" rx="11" ry="10" fill="#f5f2eb" opacity="0.7"/>
+        {/* Central white mask */}
+        <ellipse cx="50" cy="48" rx="22" ry="20" fill="#f5f2eb" opacity="0.85"/>
+        {/* Muzzle bump */}
+        <ellipse cx="50" cy="55" rx="12" ry="8" fill="#faf8f2"/>
+
+        {/* ── EYES — blue-gray, more almond, serious look ── */}
+        {/* Eye bg */}
+        <ellipse cx="37" cy="43" rx="9" ry="8" fill="#e8f2f8"/>
+        <ellipse cx="63" cy="43" rx="9" ry="8" fill="#e8f2f8"/>
+        {/* Iris — blue-gray like Momo */}
+        <ellipse cx="37" cy="43" rx="7.5" ry="7" fill="#7898b0"/>
+        <ellipse cx="63" cy="43" rx="7.5" ry="7" fill="#7898b0"/>
+        {/* Iris inner lighter */}
+        <ellipse cx="37" cy="43" rx="5.5" ry="5.5" fill="#88b0c8"/>
+        <ellipse cx="63" cy="43" rx="5.5" ry="5.5" fill="#88b0c8"/>
+        {/* Pupil */}
+        <g className="cat-eye">
+          <ellipse cx="37" cy="43" rx="3" ry="4.5" fill="#0a1420"/>
+          <ellipse cx="63" cy="43" rx="3" ry="4.5" fill="#0a1420"/>
+        </g>
         {/* Eye shine */}
-        <circle cx="37" cy="48" r="1.8" fill="white" opacity="0.9"/>
-        <circle cx="57" cy="48" r="1.8" fill="white" opacity="0.9"/>
-        <circle cx="34" cy="54" r="0.9" fill="white" opacity="0.5"/>
-        <circle cx="54" cy="54" r="0.9" fill="white" opacity="0.5"/>
+        <circle cx="34" cy="39" r="2"   fill="white" opacity="0.9"/>
+        <circle cx="60" cy="39" r="2"   fill="white" opacity="0.9"/>
+        <circle cx="39" cy="45" r="1.1" fill="white" opacity="0.45"/>
+        <circle cx="65" cy="45" r="1.1" fill="white" opacity="0.45"/>
         {/* Eye outline */}
-        <ellipse cx="35" cy="50" rx="8.5" ry="9" fill="none" stroke="#a0b8c0" strokeWidth="0.8"/>
-        <ellipse cx="55" cy="50" rx="8.5" ry="9" fill="none" stroke="#a0b8c0" strokeWidth="0.8"/>
+        <ellipse cx="37" cy="43" rx="7.5" ry="7" stroke="#2a3a50" strokeWidth="0.8" fill="none"/>
+        <ellipse cx="63" cy="43" rx="7.5" ry="7" stroke="#2a3a50" strokeWidth="0.8" fill="none"/>
 
-        {/* Nose */}
-        <path d="M43 62 L45 64.5 L47 62 Q45 60.5 43 62Z" fill="#f4a0a0"/>
-        {/* Mouth */}
-        <path d="M45 64.5 Q42 67 40 66" stroke="#c08080" strokeWidth="1.2" fill="none" strokeLinecap="round"/>
-        <path d="M45 64.5 Q48 67 50 66" stroke="#c08080" strokeWidth="1.2" fill="none" strokeLinecap="round"/>
+        {/* ── NOSE + MOUTH ── */}
+        <path d="M47 54 Q50 51 53 54 Q50 58 47 54Z" fill="#e8a0b0"/>
+        <path d="M50 58 L50 61" stroke="#d8909e" strokeWidth="1.2"/>
+        <path d="M50 61 Q45 65 42 63" stroke="#c88090" strokeWidth="1.3" fill="none"
+          strokeLinecap="round"/>
+        <path d="M50 61 Q55 65 58 63" stroke="#c88090" strokeWidth="1.3" fill="none"
+          strokeLinecap="round"/>
 
-        {/* Whiskers */}
-        <line x1="20" y1="61" x2="40" y2="63" stroke="#a0a0a0" strokeWidth="0.9" opacity="0.7"/>
-        <line x1="19" y1="64" x2="39" y2="64.5" stroke="#a0a0a0" strokeWidth="0.9" opacity="0.7"/>
-        <line x1="20" y1="67" x2="40" y2="66" stroke="#a0a0a0" strokeWidth="0.9" opacity="0.7"/>
-        <line x1="70" y1="61" x2="50" y2="63" stroke="#a0a0a0" strokeWidth="0.9" opacity="0.7"/>
-        <line x1="71" y1="64" x2="51" y2="64.5" stroke="#a0a0a0" strokeWidth="0.9" opacity="0.7"/>
-        <line x1="70" y1="67" x2="50" y2="66" stroke="#a0a0a0" strokeWidth="0.9" opacity="0.7"/>
+        {/* ── WHISKERS ── */}
+        <line x1="46" y1="55" x2="6"  y2="49" stroke="#a8a4a0" strokeWidth="1"   opacity="0.6"/>
+        <line x1="46" y1="58" x2="4"  y2="58" stroke="#a8a4a0" strokeWidth="1"   opacity="0.6"/>
+        <line x1="46" y1="61" x2="7"  y2="65" stroke="#a8a4a0" strokeWidth="1"   opacity="0.6"/>
+        <line x1="54" y1="55" x2="94" y2="49" stroke="#a8a4a0" strokeWidth="1"   opacity="0.6"/>
+        <line x1="54" y1="58" x2="96" y2="58" stroke="#a8a4a0" strokeWidth="1"   opacity="0.6"/>
+        <line x1="54" y1="61" x2="93" y2="65" stroke="#a8a4a0" strokeWidth="1"   opacity="0.6"/>
 
-        {/* Tabby stripe marks on cheeks */}
-        <path d="M22 54 Q26 52 28 56" stroke="#c0b8a8" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
-        <path d="M23 58 Q27 57 28 60" stroke="#c0b8a8" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
-        <path d="M68 54 Q64 52 62 56" stroke="#c0b8a8" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
-        <path d="M67 58 Q63 57 62 60" stroke="#c0b8a8" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+        {/* ── COLLAR — teal/cyan like Momo ── */}
+        <rect x="35" y="65" width="30" height="8" rx="4" fill="#1a7a6a"/>
+        <rect x="35" y="65" width="30" height="5" rx="3" fill="#28a08a"/>
+        {/* Orange bell — Momo's signature */}
+        <circle cx="50" cy="70" r="5"   fill="#d06010"/>
+        <circle cx="50" cy="69" r="4"   fill="#e87820"/>
+        <circle cx="50" cy="68.5" r="2" fill="#f89830" opacity="0.8"/>
+        <line x1="50" y1="73" x2="50" y2="75" stroke="#b05010" strokeWidth="1.2"/>
+        {/* Small bead decorations on collar */}
+        <circle cx="41" cy="68" r="2" fill="#40b898" opacity="0.8"/>
+        <circle cx="59" cy="68" r="2" fill="#40b898" opacity="0.8"/>
+        <circle cx="36" cy="68" r="1.5" fill="#50c8a8" opacity="0.6"/>
+        <circle cx="64" cy="68" r="1.5" fill="#50c8a8" opacity="0.6"/>
 
-        {/* Bell on collar (barely visible peeking) */}
-        <circle cx="45" cy="76" r="3.5" fill="#d4a820" opacity="0.7"/>
-        <circle cx="45" cy="77" r="1.5" fill="#a07010" opacity="0.6"/>
       </svg>
+    </div>
+  );
+}
+
+
+// ── Draggable BG walking cat ───────────────────────────────────────────────────
+function CatWalker() {
+  const [pos,  setPos]  = useState({x:150, y:Math.max(100, window.innerHeight*0.6)});
+  const [dir,  setDir]  = useState(1);
+  const [drag, setDrag] = useState(false);
+  const [size, setSize] = useState(110);
+  const posRef  = useRef({x:150, y:window.innerHeight*0.6});
+  const dirRef  = useRef(1);
+  const dragRef = useRef(null);
+  const rafRef  = useRef(null);
+  const frameRef= useRef(0);
+
+  useEffect(()=>{
+    const step=()=>{
+      frameRef.current++;
+      if(!dragRef.current){
+        const spd=1.4;
+        let {x,y}=posRef.current;
+        x += dirRef.current * spd;
+        const W=window.innerWidth;
+        if(x>W-size-20){dirRef.current=-1;setDir(-1);x=W-size-20;}
+        if(x<20){dirRef.current=1;setDir(1);x=20;}
+        posRef.current={x,y};
+        setPos({x,y});
+      }
+      rafRef.current=requestAnimationFrame(step);
+    };
+    rafRef.current=requestAnimationFrame(step);
+    return()=>{if(rafRef.current)cancelAnimationFrame(rafRef.current);};
+  },[]);
+
+  const startDrag=(cx,cy)=>{
+    dragRef.current={ox:cx-posRef.current.x,oy:cy-posRef.current.y};
+    setDrag(true);
+  };
+  const moveDrag=(cx,cy,mvx)=>{
+    if(!dragRef.current)return;
+    const nx=cx-dragRef.current.ox, ny=cy-dragRef.current.oy;
+    posRef.current={x:nx,y:ny};
+    setPos({x:nx,y:ny});
+    if(mvx>0){dirRef.current=1;setDir(1);}
+    else if(mvx<0){dirRef.current=-1;setDir(-1);}
+  };
+  const endDrag=()=>{dragRef.current=null;setDrag(false);};
+
+  const onMouseDown=e=>{
+    e.preventDefault();
+    startDrag(e.clientX,e.clientY);
+    const mm=ev=>{moveDrag(ev.clientX,ev.clientY,ev.movementX);};
+    const mu=()=>{endDrag();window.removeEventListener("mousemove",mm);window.removeEventListener("mouseup",mu);};
+    window.addEventListener("mousemove",mm);window.addEventListener("mouseup",mu);
+  };
+  const onTouchStart=e=>{
+    const t=e.touches[0];startDrag(t.clientX,t.clientY);
+    let lastX=t.clientX;
+    const tm=ev=>{const t2=ev.touches[0];moveDrag(t2.clientX,t2.clientY,t2.clientX-lastX);lastX=t2.clientX;};
+    const te=()=>{endDrag();window.removeEventListener("touchmove",tm);window.removeEventListener("touchend",te);};
+    window.addEventListener("touchmove",tm,{passive:true});window.addEventListener("touchend",te);
+  };
+
+  return(
+    <div onMouseDown={onMouseDown} onTouchStart={onTouchStart} style={{
+      position:"fixed", left:pos.x, top:pos.y, zIndex:5,
+      cursor:drag?"grabbing":"grab",
+      transform:`scaleX(${dir>0?1:-1})`,
+      filter:"drop-shadow(0 8px 24px rgba(0,0,0,.22))",
+      userSelect:"none", touchAction:"none",
+    }}>
+      <style>{CAT_CSS}</style>
+      <div className={drag?"":"cat-walk"}>
+        <CatBodySVG size={size} walking={!drag}/>
+      </div>
+      <div style={{display:"flex",gap:5,justifyContent:"center",marginTop:2}}>
+        <button onClick={e=>{e.stopPropagation();setSize(s=>Math.max(60,s-20));}} style={{width:20,height:20,borderRadius:"50%",background:"rgba(0,0,0,.3)",color:"#fff",border:"none",fontSize:12,cursor:"pointer",lineHeight:"20px",textAlign:"center",backdropFilter:"blur(4px)"}}>−</button>
+        <button onClick={e=>{e.stopPropagation();setSize(s=>Math.min(200,s+20));}} style={{width:20,height:20,borderRadius:"50%",background:"rgba(0,0,0,.3)",color:"#fff",border:"none",fontSize:12,cursor:"pointer",lineHeight:"20px",textAlign:"center",backdropFilter:"blur(4px)"}}>+</button>
+      </div>
     </div>
   );
 }
