@@ -959,6 +959,110 @@ function CatBodySVG({ size=100, walking=true }) {
 }
 
 
+// ── CatPeek — แมวเกาะขอบ login card ──────────────────────────────────────────
+function CatPeek({ side = "right" }) {
+  const flip = side === "left";
+  return (
+    <div style={{
+      position:"absolute",
+      top: -78,
+      [flip?"left":"right"]: flip ? 14 : 14,
+      width: 88, height: 95,
+      zIndex: 10, pointerEvents:"none", userSelect:"none",
+      transform: flip ? "scaleX(-1)" : "none",
+    }}>
+      <style>{CAT_CSS}</style>
+      <svg viewBox="0 0 88 95" xmlns="http://www.w3.org/2000/svg" width="88" height="95" style={{overflow:"visible"}}>
+        {/* Paws gripping the edge */}
+        <ellipse cx="18" cy="88" rx="13" ry="7" fill="#c8c0b0"/>
+        <ellipse cx="18" cy="86" rx="11" ry="6" fill="#d8d0c0"/>
+        <ellipse cx="18" cy="89" rx="9" ry="5" fill="#f5f2eb"/>
+        <line x1="12" y1="90" x2="12" y2="94" stroke="#d0ccbf" strokeWidth="1"/>
+        <line x1="15" y1="91" x2="15" y2="95" stroke="#d0ccbf" strokeWidth="1"/>
+        <line x1="18" y1="91" x2="18" y2="95" stroke="#d0ccbf" strokeWidth="1"/>
+        <line x1="21" y1="91" x2="21" y2="95" stroke="#d0ccbf" strokeWidth="1"/>
+        <line x1="24" y1="90" x2="24" y2="94" stroke="#d0ccbf" strokeWidth="1"/>
+
+        <ellipse cx="70" cy="88" rx="13" ry="7" fill="#b8b0a0"/>
+        <ellipse cx="70" cy="86" rx="11" ry="6" fill="#c8c0b0"/>
+        <ellipse cx="70" cy="89" rx="9" ry="5" fill="#f0ede6"/>
+        <line x1="64" y1="90" x2="64" y2="94" stroke="#c8c4bc" strokeWidth="1"/>
+        <line x1="67" y1="91" x2="67" y2="95" stroke="#c8c4bc" strokeWidth="1"/>
+        <line x1="70" y1="91" x2="70" y2="95" stroke="#c8c4bc" strokeWidth="1"/>
+        <line x1="73" y1="91" x2="73" y2="95" stroke="#c8c4bc" strokeWidth="1"/>
+        <line x1="76" y1="90" x2="76" y2="94" stroke="#c8c4bc" strokeWidth="1"/>
+
+        {/* Chest/body peeking up */}
+        <ellipse cx="44" cy="76" rx="22" ry="14" fill="#c0b8a8"/>
+        <ellipse cx="44" cy="74" rx="18" ry="11" fill="#ccc4b4"/>
+        <ellipse cx="44" cy="78" rx="13" ry="10" fill="#f5f2eb" opacity="0.65"/>
+
+        {/* HEAD */}
+        <circle cx="44" cy="42" r="25" fill="#bab2a2"/>
+        <ellipse cx="44" cy="35" rx="20" ry="15" fill="#cac2b2"/>
+
+        {/* Head spots — no M stripe */}
+        <circle cx="38" cy="27" r="2.5" fill="#a09888" opacity="0.38"/>
+        <circle cx="44" cy="24" r="3"   fill="#a09888" opacity="0.32"/>
+        <circle cx="50" cy="27" r="2.5" fill="#a09888" opacity="0.38"/>
+
+        {/* Side shading */}
+        <ellipse cx="26" cy="44" rx="7" ry="11" fill="#a8a098" opacity="0.28"/>
+        <ellipse cx="62" cy="44" rx="7" ry="11" fill="#a8a098" opacity="0.28"/>
+
+        {/* EARS */}
+        <polygon points="15,32 6,10 30,22" fill="#b0a898"/>
+        <polygon points="16,30 9,14 27,22" fill="#f5c0c8"/>
+        <polygon points="59,32 72,10 52,22" fill="#b0a898"/>
+        <polygon points="60,30 69,14 55,22" fill="#f5c0c8"/>
+
+        {/* White face mask + puffy cheeks */}
+        <ellipse cx="22" cy="48" rx="10" ry="9" fill="#f5f2eb" opacity="0.65"/>
+        <ellipse cx="66" cy="48" rx="10" ry="9" fill="#f5f2eb" opacity="0.65"/>
+        <ellipse cx="44" cy="48" rx="20" ry="18" fill="#f5f2eb" opacity="0.82"/>
+        <ellipse cx="44" cy="54" rx="11" ry="8" fill="#faf8f2"/>
+
+        {/* EYES — blue-gray, almond */}
+        <ellipse cx="33" cy="43" rx="8.5" ry="8" fill="#e4f0f8"/>
+        <ellipse cx="55" cy="43" rx="8.5" ry="8" fill="#e4f0f8"/>
+        <ellipse cx="33" cy="43" rx="7" ry="6.5" fill="#7898b0"/>
+        <ellipse cx="55" cy="43" rx="7" ry="6.5" fill="#7898b0"/>
+        <ellipse cx="33" cy="43" rx="5" ry="5.5" fill="#88b0c8"/>
+        <ellipse cx="55" cy="43" rx="5" ry="5.5" fill="#88b0c8"/>
+        <ellipse cx="33" cy="43" rx="2.8" ry="4.2" fill="#0a1420"/>
+        <ellipse cx="55" cy="43" rx="2.8" ry="4.2" fill="#0a1420"/>
+        <circle cx="30" cy="39" r="1.9" fill="white" opacity="0.9"/>
+        <circle cx="52" cy="39" r="1.9" fill="white" opacity="0.9"/>
+        <ellipse cx="33" cy="43" rx="7" ry="6.5" stroke="#2a3a50" strokeWidth="0.8" fill="none"/>
+        <ellipse cx="55" cy="43" rx="7" ry="6.5" stroke="#2a3a50" strokeWidth="0.8" fill="none"/>
+
+        {/* NOSE + MOUTH */}
+        <path d="M41 53 Q44 50 47 53 Q44 57 41 53Z" fill="#e8a0b0"/>
+        <path d="M44 57 L44 60" stroke="#d8909e" strokeWidth="1.2"/>
+        <path d="M44 60 Q40 63 37 61" stroke="#c88090" strokeWidth="1.2" fill="none" strokeLinecap="round"/>
+        <path d="M44 60 Q48 63 51 61" stroke="#c88090" strokeWidth="1.2" fill="none" strokeLinecap="round"/>
+
+        {/* WHISKERS */}
+        <line x1="40" y1="53" x2="8"  y2="48" stroke="#a8a4a0" strokeWidth="0.9" opacity="0.6"/>
+        <line x1="40" y1="56" x2="6"  y2="56" stroke="#a8a4a0" strokeWidth="0.9" opacity="0.6"/>
+        <line x1="40" y1="59" x2="8"  y2="63" stroke="#a8a4a0" strokeWidth="0.9" opacity="0.6"/>
+        <line x1="48" y1="53" x2="80" y2="48" stroke="#a8a4a0" strokeWidth="0.9" opacity="0.6"/>
+        <line x1="48" y1="56" x2="82" y2="56" stroke="#a8a4a0" strokeWidth="0.9" opacity="0.6"/>
+        <line x1="48" y1="59" x2="80" y2="63" stroke="#a8a4a0" strokeWidth="0.9" opacity="0.6"/>
+
+        {/* COLLAR — teal + orange bell */}
+        <rect x="29" y="65" width="30" height="7" rx="3.5" fill="#1a7a6a"/>
+        <rect x="29" y="65" width="30" height="4.5" rx="3" fill="#28a08a"/>
+        <circle cx="44" cy="69" r="4.5" fill="#d06010"/>
+        <circle cx="44" cy="68" r="3.5" fill="#e87820"/>
+        <circle cx="44" cy="67.5" r="1.8" fill="#f89830" opacity="0.8"/>
+        <circle cx="35" cy="67" r="1.8" fill="#40b898" opacity="0.7"/>
+        <circle cx="53" cy="67" r="1.8" fill="#40b898" opacity="0.7"/>
+      </svg>
+    </div>
+  );
+}
+
 // ── Draggable BG walking cat ───────────────────────────────────────────────────
 function CatWalker() {
   const [pos,  setPos]  = useState({x:150, y:Math.max(100, window.innerHeight*0.6)});
