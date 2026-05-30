@@ -617,7 +617,6 @@ export default function App() {
       <style>{CSS}</style><AnimBG themeId={themeId}/>
       <Toast msg={toast}/>
       <ThemeSwitcher current={themeId} onChange={changeTheme}/>
-      <CatWalker/>
       <div style={{position:"relative",zIndex:1}}>
         {view==="board" && <PublicBoard employees={employees} records={records} gSch={gSch} clinic={clinic} onLogin={()=>setView("login")}/>}
         {view==="login" && <Login employees={employees} err={err} clinic={clinic} onLogin={login} onRetry={loadAll} onBoard={()=>setView("board")}/>}
