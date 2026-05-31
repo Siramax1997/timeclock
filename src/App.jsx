@@ -630,7 +630,21 @@ export default function App() {
 // ─── Public Status Board (ไม่ต้อง login) ────────────────────────────────────────
 function PublicBoard({ employees, records, gSch, clinic, onLogin }) {
   const [now, setNow] = useState(new Date());
-  useEffect(()=>{ const t=setInterval(()=>setNow(new Date()),1000); return()=>clearInterval(t); },[]);
+  useEffect(()=>{
+    const t=setInterval(()=>{
+      setNow(new Date());
+      // ── GPS expiry check ──
+      setGpsAt(prev=>{
+        if(prev && Date.now()-prev > GPS_TTL){
+          setGps("idle");
+          setGMsg("⏱ พิกัดหมดอายุ — กรุณาตรวจสอบใหม่");
+          return null;
+        }
+        return prev;
+      });
+    },1000);
+    return()=>clearInterval(t);
+  },[]);
   const staff = employees.filter(e => e.role !== "admin");
   const tod   = today();
 
@@ -1309,6 +1323,8 @@ function Login({employees,err,clinic,onLogin,onRetry,onBoard}){
 function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onReloadEmp,onLogout,showToast}){
   const[tab,setTab]=useState("checkin");
   const[gps,setGps]=useState("idle"); // idle|checking|ok|err|far
+  const[gpsAt,setGpsAt]=useState(null);  // timestamp ที่ตรวจสอบพิกัด
+  const GPS_TTL = 3 * 60 * 1000;        // หมดอายุใน 3 นาที
   const[gd,setGd]=useState(null);
   const[gMsg,setGMsg]=useState("");
   // ✅ Key fix: local session overrides — never lost on server reload
@@ -1322,7 +1338,21 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
   const[pf,setPf]=useState({});
   const[showEmoji,setShowEmoji]=useState(false);
   const[newPin,setNewPin]=useState("");const[cfPin,setCfPin]=useState("");const[showPin,setShowPin]=useState(false);
-  useEffect(()=>{ const t=setInterval(()=>setNow(new Date()),1000); return()=>clearInterval(t); },[]);
+  useEffect(()=>{
+    const t=setInterval(()=>{
+      setNow(new Date());
+      // ── GPS expiry check ──
+      setGpsAt(prev=>{
+        if(prev && Date.now()-prev > GPS_TTL){
+          setGps("idle");
+          setGMsg("⏱ พิกัดหมดอายุ — กรุณาตรวจสอบใหม่");
+          return null;
+        }
+        return prev;
+      });
+    },1000);
+    return()=>clearInterval(t);
+  },[]);
 
   const me = empList.find(e=>e.id===user.id)||user;
   useEffect(()=>{ setPf({email:me.email||"",phone:me.phone||"",note:me.note||"",avatar:me.avatar||"🐾"}); },[me.id]);
@@ -1382,10 +1412,10 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
     navigator.geolocation.getCurrentPosition(
       pos=>{
         const{latitude:lat,longitude:lng,accuracy:acc}=pos.coords;
-        if(!location?.lat||!location?.lng){ setGps("ok"); setGd({lat,lng,acc,dist:0}); setGMsg("✓ รับพิกัดสำเร็จ"); return; }
+        if(!location?.lat||!location?.lng){ setGps("ok"); setGpsAt(Date.now()); setGd({lat,lng,acc,dist:0}); setGMsg("✓ รับพิกัดสำเร็จ"); return; }
         const dist=haversine(lat,lng,+location.lat,+location.lng);
         setGd({lat,lng,acc,dist});
-        dist<=(+location.radius||200)?(setGps("ok"),setGMsg(`✓ อยู่ในพื้นที่ — ห่าง ${Math.round(dist)} ม.`)):(setGps("far"),setGMsg(`✗ นอกพื้นที่ — ห่าง ${Math.round(dist)} ม.`));
+        dist<=(+location.radius||200)?(setGps("ok"),setGpsAt(Date.now()),setGMsg(`✓ อยู่ในพื้นที่ — ห่าง ${Math.round(dist)} ม.`)):(setGps("far"),setGMsg(`✗ นอกพื้นที่ — ห่าง ${Math.round(dist)} ม.`));
       },
       ()=>{ setGps("err"); setGMsg("ไม่ได้รับสัญญาณ — กรุณาอนุญาต Location"); },
       { enableHighAccuracy:true, timeout:14000 }
@@ -1655,7 +1685,15 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
               <span style={{fontSize:13,fontWeight:600,color:"var(--tx)"}}>📡 ตรวจสอบพิกัด{location?.name?` · ${location.name}`:""}</span>
               <span style={{fontSize:11,color:gCol,fontWeight:600}}>{{idle:"รอ",checking:"กำลังรับ...",ok:"✓ พร้อม",err:"✗ Error",far:"✗ นอกพื้นที่"}[gps]}</span>
             </div>
-            {gMsg&&<div style={{fontSize:12,color:gCol,background:gps==="ok"?"var(--accBg)":"var(--redBg)",border:`1px solid ${gCol}`,borderRadius:8,padding:"8px 12px",marginBottom:10}}>{gMsg}</div>}
+            {gMsg&&<div style={{fontSize:12,color:gCol,background:gps==="ok"?"var(--accBg)":"var(--redBg)",border:`1px solid ${gCol}`,borderRadius:8,padding:"8px 12px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span>{gMsg}</span>
+                {gps==="ok"&&gpsAt&&(()=>{
+                  const remaining = Math.max(0, Math.ceil((GPS_TTL-(Date.now()-gpsAt))/1000));
+                  const mins = Math.floor(remaining/60);
+                  const secs = remaining%60;
+                  return <span style={{fontSize:10,opacity:.7,fontFamily:"monospace"}}>⏱ {mins}:{String(secs).padStart(2,"0")}</span>;
+                })()}
+              </div>}
             <button onClick={checkGPS} disabled={gps==="checking"} style={{width:"100%",padding:10,background:gps==="ok"?"var(--accBg)":"var(--card)",color:gps==="checking"?"var(--yellow)":gps==="ok"?"var(--acc)":"var(--tx)",border:`1px solid ${gps==="ok"?"var(--acc)":"var(--br)"}`,display:"flex",alignItems:"center",justifyContent:"center",gap:8,fontSize:13,borderRadius:10}}>
               <span className={gps==="checking"?"spin":""} style={{fontSize:16}}>📍</span>
               {gps==="checking"?"กำลังรับสัญญาณ GPS...":"ตรวจสอบพิกัดของฉัน"}
