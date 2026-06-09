@@ -599,7 +599,18 @@ export default function App() {
     if(r.success) setEmp(r.data||[]);
   },[]);
 
-  const login  = u => { setUser(u); setView(u.role==="admin"?"admin":"dash"); };
+  const [showBday, setShowBday] = useState(false);
+  const [bdayUser, setBdayUser] = useState(null);
+
+  const login = u => {
+    // Check birthday
+    if (u.birthday) {
+      const today_md = new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Bangkok"}).slice(5); // MM-DD
+      const bday_md  = u.birthday.slice(5); // MM-DD
+      if (today_md === bday_md) { setBdayUser(u); setShowBday(true); }
+    }
+    setUser(u); setView(u.role==="admin"?"admin":"dash");
+  };
   const logout = () => { setUser(null); setView("login"); };
 
   const ws = { ...TV(th), minHeight:"100vh", position:"relative" };
@@ -617,6 +628,10 @@ export default function App() {
       <style>{CSS}</style><AnimBG themeId={themeId}/>
       <Toast msg={toast}/>
       <ThemeSwitcher current={themeId} onChange={changeTheme}/>
+      {showBday && bdayUser && (
+        <BirthdayPopup name={bdayUser.name} avatar={bdayUser.avatar}
+          onClose={()=>setShowBday(false)}/>
+      )}
       <div style={{position:"relative",zIndex:1}}>
         {view==="board" && <PublicBoard employees={employees} records={records} gSch={gSch} clinic={clinic} onLogin={()=>setView("login")}/>}
         {view==="login" && <Login employees={employees} err={err} clinic={clinic} onLogin={login} onRetry={loadAll} onBoard={()=>setView("board")}/>}
@@ -741,6 +756,44 @@ function PublicBoard({ employees, records, gSch, clinic, onLogin }) {
   );
 }
 
+
+
+// ─── Birthday Popup ─────────────────────────────────────────────────────────────
+function BirthdayPopup({ name, avatar, age, onClose }) {
+  useEffect(()=>{ const t=setTimeout(onClose, 12000); return()=>clearTimeout(t); },[]);
+  return(
+    <div style={{position:"fixed",inset:0,zIndex:800,display:"flex",alignItems:"center",justifyContent:"center",padding:20,background:"rgba(0,0,0,.65)",backdropFilter:"blur(10px)",animation:"fd .3s ease"}}
+      onClick={onClose}>
+      <div className="card" style={{maxWidth:340,width:"100%",padding:"32px 28px",textAlign:"center",borderColor:"rgba(255,215,0,.4)",boxShadow:"0 0 60px rgba(255,200,0,.25)",animation:"pop .4s ease"}}
+        onClick={e=>e.stopPropagation()}>
+        {/* Confetti dots */}
+        {["🎉","🎊","🎈","✨","🥳","🎁","⭐","🎀"].map((em,i)=>(
+          <span key={i} style={{position:"absolute",fontSize:20,
+            top:`${10+Math.random()*80}%`,left:`${5+i*12}%`,
+            animation:`fd ${0.3+i*0.15}s ease`,opacity:0.8}}>{em}</span>
+        ))}
+        {/* Avatar */}
+        <div style={{fontSize:64,marginBottom:8,animation:"pop .5s ease"}}>{avatar||"🐾"}</div>
+        {/* Title */}
+        <div style={{fontSize:28,marginBottom:4}}>🎂</div>
+        <div style={{fontSize:22,fontWeight:800,color:"var(--tx)",marginBottom:6}}>สุขสันต์วันเกิด!</div>
+        <div style={{fontSize:16,color:"var(--acc)",fontWeight:700,marginBottom:4}}>🎉 {name} 🎉</div>
+        {age&&<div style={{fontSize:13,color:"var(--tx2)",marginBottom:16}}>ครบรอบ {age} ปี 🎈</div>}
+        {!age&&<div style={{marginBottom:16}}/>}
+        <div style={{fontSize:13,color:"var(--tx2)",lineHeight:1.8,marginBottom:20}}>
+          ขอให้มีความสุขมากๆ<br/>สุขภาพแข็งแรง และทำงานสนุกนะครับ 🐾
+        </div>
+        <button onClick={onClose}
+          style={{background:"linear-gradient(135deg,#f59e0b,#ef4444)",color:"#fff",
+            padding:"10px 28px",borderRadius:50,fontWeight:700,fontSize:14,
+            boxShadow:"0 4px 20px rgba(245,158,11,.4)"}}>
+          ขอบคุณ 🥰
+        </button>
+        <div style={{marginTop:10,fontSize:10,color:"var(--tx3)"}}>ปิดอัตโนมัติใน 12 วินาที</div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Cat System (walking + login peek) ────────────────────────────────────────
 const CAT_CSS = `
@@ -1157,7 +1210,8 @@ function CatWalker() {
 }
 
 
-// ─── Login ────────────────────────────────────────────────────────────────────
+// ─── Birthday Popup ─────────────────────────────────────────────────────────────
+
 function Login({employees,err,clinic,onLogin,onRetry,onBoard}){
   const SK_ID  = "tv_id";
   const SK_PIN = "tv_pin";
@@ -2115,6 +2169,236 @@ function ShiftManager({ employees, gSch, shifts, onReload, showToast }) {
   );
 }
 
+
+// ─── Dashboard Component ──────────────────────────────────────────────────────
+function Dashboard({ employees, records, gSch }) {
+  const [month, setMonth] = useState(today().slice(0,7));
+  const staff = employees.filter(e=>e.role!=="admin");
+  const MONTHS_TH = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+
+  // ─── Compute per-employee stats for selected month ─────────────────────────
+  const stats = staff.map(emp => {
+    const moRecs = Object.entries(records)
+      .filter(([d]) => d.startsWith(month))
+      .map(([d, day]) => day[emp.id] ? {date:d, ...day[emp.id]} : null)
+      .filter(Boolean);
+
+    const worked   = moRecs.filter(r => r.checkIn && !r.leaveType).length;
+    const late     = moRecs.filter(r => {
+      if (!r.checkIn) return false;
+      const s = getScheduleForDate(r.date, emp, gSch);
+      return s && STATUS(r, s).l.startsWith("มาสาย");
+    }).length;
+    const ot = moRecs.reduce((x,r) => {
+      const s = getScheduleForDate(r.date, emp, gSch);
+      const res = calcOT(r.checkIn, r.checkOut, r.breakStart, r.breakEnd, s);
+      return x + (res?.ot || 0);
+    }, 0);
+    const leaveUsed = moRecs.filter(r => r.leaveType).length;
+    const totalMins = moRecs.reduce((x,r) => x + (dm(r.checkIn,r.checkOut)||0), 0);
+
+    return { emp, worked, late, ot, leaveUsed, totalMins };
+  });
+
+  const maxWorked   = Math.max(...stats.map(s=>s.worked), 1);
+  const maxOT       = Math.max(...stats.map(s=>s.ot), 1);
+  const maxLate     = Math.max(...stats.map(s=>s.late), 1);
+  const maxHrs      = Math.max(...stats.map(s=>s.totalMins), 1);
+
+  // ─── Upcoming birthdays ───────────────────────────────────────────────────
+  const upcomingBdays = staff
+    .filter(e => e.birthday)
+    .map(e => {
+      const bday = e.birthday.slice(5); // MM-DD
+      const thisYear = new Date().getFullYear();
+      const todayStr = new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Bangkok"});
+      const bdayDate = new Date(`${thisYear}-${bday}T12:00:00`);
+      const todayDate = new Date(todayStr+"T12:00:00");
+      let diff = Math.round((bdayDate - todayDate)/(1000*60*60*24));
+      if (diff < 0) diff += 365; // next year
+      return { ...e, diff, bdayDate };
+    })
+    .sort((a,b) => a.diff - b.diff)
+    .slice(0, 5);
+
+  // ─── Bar chart helper ─────────────────────────────────────────────────────
+  const BarChart = ({ data, maxVal, color, label, fmt }) => (
+    <div className="card" style={{padding:"16px 20px",flex:1,minWidth:280}}>
+      <div className="sec" style={{marginBottom:14}}>{label}</div>
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        {data.map(({emp,val},i) => {
+          const pct = maxVal > 0 ? (val/maxVal)*100 : 0;
+          return (
+            <div key={emp.id} style={{display:"flex",alignItems:"center",gap:10}}>
+              <span style={{fontSize:16,flexShrink:0}}>{emp.avatar||"🐾"}</span>
+              <div style={{fontSize:11,color:"var(--tx2)",width:70,flexShrink:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{emp.name}</div>
+              <div style={{flex:1,height:20,background:"var(--card2)",borderRadius:10,overflow:"hidden",position:"relative"}}>
+                <div style={{height:"100%",width:`${pct}%`,background:color,borderRadius:10,
+                  transition:"width .6s ease",minWidth:pct>0?4:0}}/>
+              </div>
+              <div style={{fontSize:11,fontWeight:700,color,minWidth:36,textAlign:"right"}}>{fmt(val)}</div>
+            </div>
+          );
+        })}
+        {data.length===0&&<div style={{fontSize:13,color:"var(--tx3)",textAlign:"center",padding:20}}>ไม่มีข้อมูล</div>}
+      </div>
+    </div>
+  );
+
+  // ─── Donut chart for today status ──────────────────────────────────────────
+  const todayStats = (() => {
+    const d = today();
+    const working = staff.filter(e=> records[d]?.[e.id]?.checkIn && !records[d]?.[e.id]?.checkOut && !records[d]?.[e.id]?.leaveType).length;
+    const done    = staff.filter(e=> records[d]?.[e.id]?.checkOut).length;
+    const onBreak = staff.filter(e=> records[d]?.[e.id]?.breakStart && !records[d]?.[e.id]?.breakEnd && !records[d]?.[e.id]?.checkOut).length;
+    const absent  = staff.length - working - done - onBreak;
+    return { working, done, onBreak, absent };
+  })();
+
+  const DonutSlice = ({pct, color, offset}) => {
+    const r=36, circ=2*Math.PI*r;
+    const dash = pct*circ/100;
+    return <circle cx="50" cy="50" r={r} fill="none" stroke={color} strokeWidth="14"
+      strokeDasharray={`${dash} ${circ-dash}`} strokeDashoffset={-offset*circ/100}
+      style={{transformOrigin:"50px 50px",transform:"rotate(-90deg)",transition:"all .6s"}}/>;
+  };
+
+  const donutData = [
+    {v:todayStats.working, col:"var(--acc)",   lbl:"ทำงาน"},
+    {v:todayStats.onBreak, col:"var(--yellow)", lbl:"พักอยู่"},
+    {v:todayStats.done,    col:"var(--tx3)",    lbl:"เลิกงาน"},
+    {v:todayStats.absent,  col:"var(--redBg)",  lbl:"ยังไม่เข้า"},
+  ];
+  let donutOffset = 0;
+
+  const yr = new Date().getFullYear();
+  const moLabel = MONTHS_TH[parseInt(month.slice(5,7))-1] + " " + (yr+543);
+
+  return (
+    <div className="fade">
+      {/* Month selector */}
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:18}}>
+        <input type="month" value={month} onChange={e=>setMonth(e.target.value)}
+          style={{width:160}}/>
+        <span style={{fontSize:13,color:"var(--tx2)"}}>📊 รายงานประจำเดือน {moLabel}</span>
+      </div>
+
+      {/* Top row: Donut + Birthdays */}
+      <div style={{display:"flex",gap:14,marginBottom:14,flexWrap:"wrap"}}>
+        {/* Today donut */}
+        <div className="card" style={{padding:"16px 20px",minWidth:200}}>
+          <div className="sec" style={{marginBottom:12}}>สถานะทีมวันนี้</div>
+          <div style={{display:"flex",alignItems:"center",gap:16}}>
+            <svg width="100" height="100" viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="36" fill="none" stroke="var(--card2)" strokeWidth="14"/>
+              {donutData.map((d,i) => {
+                const pct = staff.length > 0 ? d.v/staff.length*100 : 0;
+                const el = <DonutSlice key={i} pct={pct} color={d.col} offset={donutOffset}/>;
+                donutOffset += pct;
+                return el;
+              })}
+              <text x="50" y="55" textAnchor="middle" fontSize="18" fontWeight="700"
+                fill="var(--tx)">{staff.length}</text>
+            </svg>
+            <div style={{display:"flex",flexDirection:"column",gap:7}}>
+              {donutData.map((d,i)=>(
+                <div key={i} style={{display:"flex",alignItems:"center",gap:7,fontSize:12}}>
+                  <span style={{width:10,height:10,borderRadius:"50%",background:d.col,display:"inline-block",flexShrink:0}}/>
+                  <span style={{color:"var(--tx2)"}}>{d.lbl}</span>
+                  <span style={{fontWeight:700,color:"var(--tx)",marginLeft:"auto",paddingLeft:8}}>{d.v}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Upcoming birthdays */}
+        <div className="card" style={{padding:"16px 20px",flex:1,minWidth:220}}>
+          <div className="sec" style={{marginBottom:12}}>🎂 วันเกิดที่กำลังจะมาถึง</div>
+          {upcomingBdays.length === 0
+            ? <div style={{fontSize:13,color:"var(--tx3)",textAlign:"center",padding:20}}>ยังไม่มีข้อมูลวันเกิด</div>
+            : <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {upcomingBdays.map(e=>(
+                  <div key={e.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",
+                    background:e.diff===0?"var(--accBg)":"var(--card2)",borderRadius:10,
+                    border:e.diff===0?"1.5px solid var(--acc)":"1px solid var(--br)"}}>
+                    <span style={{fontSize:22}}>{e.avatar||"🐾"}</span>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,fontWeight:600,color:"var(--tx)"}}>{e.name}</div>
+                      <div style={{fontSize:10,color:"var(--tx2)"}}>
+                        🎂 {e.birthday?.slice(5).replace("-","/")} {e.birthday?.slice(0,4)&&`(${new Date().getFullYear()-parseInt(e.birthday.slice(0,4))} ปี)`}
+                      </div>
+                    </div>
+                    <div style={{textAlign:"right"}}>
+                      {e.diff===0
+                        ? <span className="pill" style={{background:"var(--accBg)",color:"var(--acc)"}}>🎉 วันนี้!</span>
+                        : <span style={{fontSize:11,color:"var(--tx2)",fontWeight:600}}>อีก {e.diff} วัน</span>
+                      }
+                    </div>
+                  </div>
+                ))}
+              </div>
+          }
+        </div>
+      </div>
+
+      {/* Bar charts grid */}
+      <div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:14}}>
+        <BarChart label="📅 วันที่เข้างาน/เดือน"
+          data={stats.map(s=>({emp:s.emp,val:s.worked}))}
+          maxVal={maxWorked} color="var(--acc)"
+          fmt={v=>`${v} วัน`}/>
+        <BarChart label="⏰ OT สะสม/เดือน"
+          data={stats.map(s=>({emp:s.emp,val:s.ot}))}
+          maxVal={maxOT} color="var(--orange)"
+          fmt={v=>v>0?hm(v):"—"}/>
+      </div>
+      <div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:14}}>
+        <BarChart label="🐢 มาสาย/เดือน"
+          data={stats.map(s=>({emp:s.emp,val:s.late}))}
+          maxVal={maxLate} color="var(--yellow)"
+          fmt={v=>`${v} ครั้ง`}/>
+        <BarChart label="⏱ ชม.รวม/เดือน"
+          data={stats.map(s=>({emp:s.emp,val:s.totalMins}))}
+          maxVal={maxHrs} color="var(--acc2)"
+          fmt={v=>hm(v)}/>
+      </div>
+
+      {/* Summary table */}
+      <div className="card" style={{overflow:"hidden"}}>
+        <table>
+          <thead><tr>
+            <th>พนักงาน</th>
+            <th style={{textAlign:"center"}}>📅 เข้างาน</th>
+            <th style={{textAlign:"center"}}>🐢 มาสาย</th>
+            <th style={{textAlign:"center"}}>🌿 ลา</th>
+            <th style={{textAlign:"center"}}>⏱ ชม.รวม</th>
+            <th style={{textAlign:"center"}}>🔥 OT</th>
+          </tr></thead>
+          <tbody>
+            {stats.map(({emp,worked,late,leaveUsed,totalMins,ot})=>(
+              <tr key={emp.id}>
+                <td><div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{fontSize:18}}>{emp.avatar||"🐾"}</span>
+                  <div>
+                    <div style={{fontWeight:600,fontSize:13}}>{emp.name}</div>
+                    <div style={{fontSize:10,color:"var(--tx3)"}}>{emp.id}</div>
+                  </div>
+                </div></td>
+                <td style={{textAlign:"center"}}><span className="pill" style={{background:"var(--accBg)",color:"var(--acc)",fontSize:11}}>{worked} วัน</span></td>
+                <td style={{textAlign:"center"}}>{late>0?<span className="pill" style={{background:"var(--yellowBg)",color:"var(--yellow)",fontSize:11}}>{late} ครั้ง</span>:<span style={{color:"var(--tx3)",fontSize:12}}>—</span>}</td>
+                <td style={{textAlign:"center"}}>{leaveUsed>0?<span className="pill" style={{background:"var(--purpleBg)",color:"var(--purple)",fontSize:11}}>{leaveUsed} วัน</span>:<span style={{color:"var(--tx3)",fontSize:12}}>—</span>}</td>
+                <td style={{textAlign:"center"}} className="mono">{hm(totalMins)}</td>
+                <td style={{textAlign:"center"}}>{ot>0?<span className="pill" style={{background:"var(--orangeBg)",color:"var(--orange)",fontSize:11}}>🔥 {hm(ot)}</span>:<span style={{color:"var(--tx3)",fontSize:12}}>—</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ─── Admin Panel ──────────────────────────────────────────────────────────────
 function AdminPanel({user,employees,records,shifts,location,gSch,clinic,onReloadAll,onReloadRec,onLogout,showToast}){
   const[tab,setTab]=useState("overview");
@@ -2244,10 +2528,13 @@ function AdminPanel({user,employees,records,shifts,location,gSch,clinic,onReload
 
       {/* Tabs */}
       <div style={{display:"flex",gap:5,marginBottom:14,overflowX:"auto",paddingBottom:2}}>
-        {[["overview","📊","ภาพรวม"],["leaves","📋","ใบลา"+(pendingLeaves.length>0?" ("+pendingLeaves.length+")":"")],["employees","👥","พนักงาน"],["shifts","📅","สลับวันหยุด"],["location","📍","พิกัด"],["schedule","🕐","ตารางงาน"],["clinicinfo","🐾","คลินิค"]].map(([k,ic,lb])=>(
+        {[["dashboard","📈","Dashboard"],["overview","📊","ภาพรวม"],["leaves","📋","ใบลา"+(pendingLeaves.length>0?" ("+pendingLeaves.length+")":"")],["employees","👥","พนักงาน"],["shifts","📅","สลับวันหยุด"],["location","📍","พิกัด"],["schedule","🕐","ตารางงาน"],["clinicinfo","🐾","คลินิค"]].map(([k,ic,lb])=>(
           <button key={k} onClick={()=>setTab(k)} style={{flex:"0 0 auto",padding:"8px 12px",background:tab===k?"var(--accBg)":"var(--card2)",color:tab===k?"var(--acc)":"var(--tx2)",border:`1px solid ${tab===k?"var(--acc)":"var(--br)"}`,borderRadius:10,fontSize:12,fontWeight:tab===k?700:400}}>{ic} {lb}</button>
         ))}
       </div>
+
+      {/* DASHBOARD */}
+      {tab==="dashboard"&&<Dashboard employees={employees} records={records} gSch={gSch}/>}
 
       {/* OVERVIEW */}
       {tab==="overview"&&(
@@ -2414,6 +2701,7 @@ function AdminPanel({user,employees,records,shifts,location,gSch,clinic,onReload
                 <div><label className="lbl">เงินเดือน (฿)</label><input type="number" placeholder="25000" value={newEmp.salary} onChange={e=>setNewEmp({...newEmp,salary:e.target.value})}/></div>
                 <div><label className="lbl">อีเมล</label><input placeholder="email@" value={newEmp.email} onChange={e=>setNewEmp({...newEmp,email:e.target.value})}/></div>
                 <div><label className="lbl">วันเริ่มงาน</label><input type="date" value={newEmp.startDate} onChange={e=>setNewEmp({...newEmp,startDate:e.target.value})}/></div>
+                <div><label className="lbl">🎂 วันเกิด</label><input type="date" value={newEmp.birthday||""} onChange={e=>setNewEmp({...newEmp,birthday:e.target.value})}/></div>
               </div>
             </div>
             <button onClick={addEmp} disabled={busy} style={{marginTop:14,background:"linear-gradient(135deg,var(--acc),var(--acc2))",color:"#fff",padding:"10px 22px",fontWeight:700,borderRadius:10}}>{busy?"กำลังบันทึก...":"+ เพิ่มพนักงาน"}</button>
@@ -2534,6 +2822,7 @@ function EmpModal({emp,gSch,records,busy,onSave,onClose,showToast}){
     maxLeaveDays:emp.maxLeaveDays!=null?String(emp.maxLeaveDays):"",
     note:emp.note||"",avatar:emp.avatar||"🐾",role:emp.role||"employee",
     weekSchedule: emp.weekSchedule||null,
+    birthday: emp.birthday||"",
   });
   const[newPin,setNewPin]=useState("");const[cfPin,setCfPin]=useState("");
   const[showEmoji,setShowEmoji]=useState(false);
@@ -2591,6 +2880,7 @@ function EmpModal({emp,gSch,records,busy,onSave,onClose,showToast}){
                 <div><label className="lbl">วันเริ่มงาน</label><input type="date" value={f.startDate} onChange={e=>setF({...f,startDate:e.target.value})}/></div>
               </div>
               <div><label className="lbl">บทบาท</label><select value={f.role} onChange={e=>setF({...f,role:e.target.value})}><option value="employee">พนักงาน</option><option value="admin">ผู้ดูแล</option></select></div>
+              <div><label className="lbl">🎂 วันเกิด</label><input type="date" value={f.birthday||""} onChange={e=>setF({...f,birthday:e.target.value})}/></div>
               <div><label className="lbl">หมายเหตุ</label><textarea rows={2} value={f.note} onChange={e=>setF({...f,note:e.target.value})} style={{resize:"vertical"}}/></div>
               <button onClick={saveInfo} disabled={busy} style={{background:"linear-gradient(135deg,var(--acc),var(--acc2))",color:"#fff",padding:10,fontWeight:700,borderRadius:10}}>{busy?"กำลังบันทึก...":"บันทึกข้อมูล"}</button>
             </div>
