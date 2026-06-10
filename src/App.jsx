@@ -2827,6 +2827,21 @@ function EmpModal({emp,gSch,records,busy,onSave,onClose,showToast}){
   const[newPin,setNewPin]=useState("");const[cfPin,setCfPin]=useState("");
   const[showEmoji,setShowEmoji]=useState(false);
 
+  // Sync f state whenever emp prop updates (e.g. after save+reload)
+  useEffect(()=>{
+    setF(prev=>({
+      ...prev,
+      name:emp.name||"", email:emp.email||"", phone:emp.phone||"",
+      position:emp.position||"", department:emp.department||"",
+      salary:emp.salary||"", startDate:emp.startDate||"",
+      note:emp.note||"", avatar:emp.avatar||"🐾", role:emp.role||"employee",
+      weekSchedule:emp.weekSchedule||null,
+      graceMins:emp.graceMins!=null?String(emp.graceMins):"",
+      maxLeaveDays:emp.maxLeaveDays!=null?String(emp.maxLeaveDays):"",
+      birthday:emp.birthday||"",
+    }));
+  },[emp.id, emp.birthday, emp.name, emp.avatar]);
+
   const myRecs=Object.entries(records).flatMap(([d,r])=>r[emp.id]?[{date:d,...r[emp.id]}]:[]).sort((a,b)=>b.date.localeCompare(a.date));
   const leaveUsed=myRecs.filter(r=>r.leaveType&&r.date.startsWith(today().slice(0,4))).length;
   const moHrs=myRecs.filter(r=>r.date.startsWith(today().slice(0,7))).reduce((x,r)=>x+(dm(r.checkIn,r.checkOut)||0),0);
