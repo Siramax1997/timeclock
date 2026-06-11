@@ -605,9 +605,17 @@ export default function App() {
   const login = u => {
     // Check birthday
     if (u.birthday) {
-      const today_md = new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Bangkok"}).slice(5); // MM-DD
-      const bday_md  = u.birthday.slice(5); // MM-DD
-      if (today_md === bday_md) { setBdayUser(u); setShowBday(true); }
+      const todayFull = new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Bangkok"}); // "yyyy-MM-dd"
+      const today_md  = todayFull.slice(5);           // "MM-DD"
+      const bday_clean = String(u.birthday).trim();   // normalize
+      const bday_md   = bday_clean.length >= 7 ? bday_clean.slice(5,10) : ""; // "MM-DD"
+      console.log("[Birthday check]", u.name, "bday:", bday_clean, "bday_md:", bday_md, "today_md:", today_md);
+      if (bday_md && today_md === bday_md) {
+        const birthYear = parseInt(bday_clean.slice(0,4));
+        const age = !isNaN(birthYear) && birthYear > 1900 ? new Date().getFullYear() - birthYear : null;
+        setBdayUser({...u, _age: age});
+        setShowBday(true);
+      }
     }
     setUser(u); setView(u.role==="admin"?"admin":"dash");
   };
@@ -629,7 +637,7 @@ export default function App() {
       <Toast msg={toast}/>
       <ThemeSwitcher current={themeId} onChange={changeTheme}/>
       {showBday && bdayUser && (
-        <BirthdayPopup name={bdayUser.name} avatar={bdayUser.avatar}
+        <BirthdayPopup name={bdayUser.name} avatar={bdayUser.avatar} age={bdayUser._age}
           onClose={()=>setShowBday(false)}/>
       )}
       <div style={{position:"relative",zIndex:1}}>
