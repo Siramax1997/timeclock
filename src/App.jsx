@@ -1984,8 +1984,7 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
 function ShiftManager({ employees, gSch, shifts, onReload, showToast }) {
   const [weekOffset, setWeekOffset] = useState(0);
   const [busy, setBusy] = useState(false);
-  const [swapNotes, setSwapNotes] = useState({}); // {"date|empId": "swapWithId"}
-  const [swapPartner, setSwapPartner] = useState({}); // {"empId": "partnerEmpId"} — เก็บคู่สลับรอไว้
+  const [swapPending, setSwapPending] = useState(null); // { empId, date, eff, newType, st, et }
 
   const getWeekDates = (offset=0) => {
     const now = new Date();
@@ -2003,8 +2002,8 @@ function ShiftManager({ employees, gSch, shifts, onReload, showToast }) {
     return `${fd(dates[0])} — ${fd(dates[6])}`;
   };
 
-  const getShift    = (empId,date) => shifts.find(s=>s.empId===empId&&s.date===date)||null;
-  const getDefType  = (empId,date) => { const emp=employees.find(e=>e.id===empId); const s=getScheduleForDate(date,emp,gSch); return s?"work":"off"; };
+  const getShift   = (empId,date) => shifts.find(s=>s.empId===empId&&s.date===date)||null;
+  const getDefType = (empId,date) => { const emp=employees.find(e=>e.id===empId); const s=getScheduleForDate(date,emp,gSch); return s?"work":"off"; };
 
   const saveShift = async (empId,date,type,startTime="",endTime="",note="") => {
     setBusy(true);
@@ -2014,27 +2013,78 @@ function ShiftManager({ employees, gSch, shifts, onReload, showToast }) {
     setBusy(false);
   };
 
+  const saveSwapPair = async (a, b) => {
+    setBusy(true);
+    const empA = employees.find(e=>e.id===a.empId);
+    const empB = employees.find(e=>e.id===b.empId);
+    const r1 = await call("saveShift",{empId:a.empId,date:a.date,type:a.newType,startTime:a.st,endTime:a.et,note:b.empId});
+    const r2 = await call("saveShift",{empId:b.empId,date:b.date,type:b.newType,startTime:b.st,endTime:b.et,note:a.empId});
+    if(r1.success && r2.success){
+      await onReload();
+      showToast(true,`✅ สลับสำเร็จ! ${empA?.name||a.empId} ↔ ${empB?.name||b.empId}`);
+    } else {
+      showToast(false,"บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง");
+    }
+    setBusy(false);
+  };
+
+  const handleCellClick = (emp, date) => {
+    if(busy) return;
+    const shift   = getShift(emp.id, date);
+    const def     = getDefType(emp.id, date);
+    const eff     = shift?.type || def;
+    const empObj  = employees.find(e=>e.id===emp.id);
+    const s2      = getScheduleForDate(date, empObj, gSch);
+    const st      = shift?.startTime || s2?.startTime || gSch?.startTime || "08:00";
+    const et      = shift?.endTime   || s2?.endTime   || gSch?.endTime   || "20:00";
+    const newType = eff==="work" ? "off" : "work";
+
+    if(!swapPending) {
+      setSwapPending({ empId:emp.id, date, eff, newType, st, et });
+      const empName = employees.find(e=>e.id===emp.id)?.name || emp.id;
+      showToast(true, `⏳ เลือก ${empName} วัน ${fd(date)} แล้ว — กดวันของคนที่จะสลับด้วย`);
+    } else {
+      if(swapPending.empId === emp.id && swapPending.date === date) {
+        setSwapPending(null);
+        showToast(false,"ยกเลิกการเลือก");
+        return;
+      }
+      const a = swapPending;
+      const b = { empId:emp.id, date, eff, newType, st, et };
+      setSwapPending(null);
+      saveSwapPair(a, b);
+    }
+  };
+
   const exportShiftsCSV = () => {
-    const rows = [["สัปดาห์","วันที่","วัน","รหัสพนักงาน","ชื่อ","ประเภท","เวลาเข้า","เวลาออก","สลับกับ"]];
+    const rows = [["สัปดาห์","วันที่","วัน","รหัสพนักงาน","ชื่อ","ประเภท","เวลาเข้า","เวลาออก","สลับกับ(รหัส)","สลับกับ(ชื่อ)"]];
     const DAY_TH_FULL = ["อาทิตย์","จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์","เสาร์"];
     shifts.filter(s=>s.type!=="default").forEach(s=>{
-      const emp = employees.find(e=>e.id===s.empId);
+      const emp     = employees.find(e=>e.id===s.empId);
       const swapEmp = s.note ? employees.find(e=>e.id===s.note) : null;
-      const d = new Date(s.date+"T12:00:00");
-      rows.push([s.week, s.date, DAY_TH_FULL[d.getDay()], s.empId, emp?.name||"", s.type==="off"?"สลับหยุด":"สลับมาทำงาน", s.startTime||"", s.endTime||"", swapEmp?swapEmp.name:s.note||""]);
+      const d       = new Date(s.date+"T12:00:00");
+      rows.push([
+        s.week||"", s.date, DAY_TH_FULL[d.getDay()],
+        s.empId, emp?.name||"",
+        s.type==="off"?"สลับหยุด":"สลับมาทำงาน",
+        s.startTime||"", s.endTime||"",
+        s.note||"",
+        swapEmp?.name||""
+      ]);
     });
+    const dl = v => String(v).includes(",") ? `"${v}"` : v;
     const a=document.createElement("a");
-    a.href=URL.createObjectURL(new Blob(["﻿"+rows.map(r=>r.join(",")).join("\n")],{type:"text/csv;charset=utf-8;"}));
+    a.href=URL.createObjectURL(new Blob(["\uFEFF"+rows.map(r=>r.map(dl).join(",")).join("\n")],{type:"text/csv;charset=utf-8;"}));
     a.download=`shifts_export.csv`; a.click();
   };
 
   const DAY_TH=["จ","อ","พ","พฤ","ศ","ส","อา"];
   const MO=["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
   const sd = d=>{ const x=new Date(d+"T12:00:00"); return `${x.getDate()} ${MO[x.getMonth()]}`; };
+  const pendingEmpName = swapPending ? (employees.find(e=>e.id===swapPending.empId)?.name||swapPending.empId) : "";
 
   return(
     <div className="fade">
-      {/* Week nav */}
       <div className="card2" style={{padding:"11px 14px",marginBottom:14,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <button onClick={()=>setWeekOffset(w=>w-1)} style={{background:"var(--card2)",color:"var(--tx2)",border:"1px solid var(--br)",padding:"7px 14px",borderRadius:10}}>← ก่อนหน้า</button>
         <div style={{textAlign:"center"}}>
@@ -2044,46 +2094,28 @@ function ShiftManager({ employees, gSch, shifts, onReload, showToast }) {
         <button onClick={()=>setWeekOffset(w=>w+1)} style={{background:"var(--card2)",color:"var(--tx2)",border:"1px solid var(--br)",padding:"7px 14px",borderRadius:10}}>ถัดไป →</button>
       </div>
 
-      {/* Legend */}
       <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
         {[["🟢","ทำงาน","var(--accBg)","var(--acc)"],["⬜","หยุด","var(--card2)","var(--tx3)"],["🔄","สลับมาทำ","var(--yellowBg)","var(--yellow)"],["🔴","สลับหยุด","var(--redBg)","var(--red)"]].map(([ic,lb,bg,col])=>(
           <span key={lb} className="pill" style={{background:bg,color:col,border:`1px solid ${col}30`,fontSize:11}}>{ic} {lb}</span>
         ))}
-        <span style={{fontSize:11,color:"var(--tx3)",paddingTop:2}}>• จุดเหลือง = override จากปกติ</span>
       </div>
 
-      {/* SwapWith selector + Export */}
-      <div className="card2" style={{padding:"12px 16px",marginBottom:12}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-          <div style={{fontSize:13,fontWeight:700,color:"var(--tx)"}}>ระบุคู่สลับ (ไม่บังคับ)</div>
-          <button onClick={exportShiftsCSV} style={{background:"var(--accBg)",color:"var(--acc)",border:"1px solid var(--acc)50",padding:"6px 14px",fontSize:12,fontWeight:700,borderRadius:9}}>⬇ Export CSV</button>
-        </div>
-        <div style={{fontSize:12,color:"var(--tx2)",marginBottom:10}}>เลือก "ใครสลับกับใคร" ก่อนกดปุ่มในตาราง เพื่อบันทึกคู่สลับใน CSV</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          {employees.map(emp=>(
-            <div key={emp.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",background:"var(--card2)",borderRadius:9}}>
-              <span style={{fontSize:14}}>{emp.avatar||"🐾"}</span>
-              <span style={{fontSize:12,color:"var(--tx)",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{emp.name}</span>
-              <select
-                value={swapPartner[emp.id]||""}
-                onChange={e=>{
-                  const partner = e.target.value;
-                  setSwapPartner(prev=>({...prev,[emp.id]:partner}));
-                  if(partner) showToast(true, `✅ ${emp.name} จะสลับกับ ${employees.find(x=>x.id===partner)?.name||partner} — กดวันในตารางได้เลย`);
-                }}
-                style={{width:90,padding:"3px 6px",fontSize:11,borderRadius:7,background:"var(--card)",border:"1px solid var(--br)",color:"var(--tx)"}}
-              >
-                <option value="">สลับกับ...</option>
-                {employees.filter(x=>x.id!==emp.id).map(x=>(
-                  <option key={x.id} value={x.id}>{x.avatar||"🐾"} {x.name}</option>
-                ))}
-              </select>
+      {swapPending && (
+        <div style={{background:"var(--yellowBg)",border:"2px solid var(--yellow)",borderRadius:12,padding:"12px 16px",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,animation:"fd .2s ease"}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:700,color:"var(--yellow)"}}>⏳ รอเลือกวันของอีกฝั่ง</div>
+            <div style={{fontSize:12,color:"var(--tx2)",marginTop:2}}>
+              เลือก <b style={{color:"var(--tx)"}}>{pendingEmpName}</b> วัน <b style={{color:"var(--tx)"}}>{fd(swapPending.date)}</b> แล้ว — กดวันของคนที่จะสลับด้วยได้เลย
             </div>
-          ))}
+          </div>
+          <button onClick={()=>setSwapPending(null)} style={{background:"var(--card2)",color:"var(--tx2)",border:"1px solid var(--br)",padding:"6px 12px",fontSize:12,borderRadius:9,flexShrink:0}}>✕ ยกเลิก</button>
         </div>
+      )}
+
+      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}>
+        <button onClick={exportShiftsCSV} style={{background:"var(--accBg)",color:"var(--acc)",border:"1px solid var(--acc)50",padding:"7px 16px",fontSize:12,fontWeight:700,borderRadius:9}}>⬇ Export CSV</button>
       </div>
 
-      {/* Grid table */}
       <div style={{overflowX:"auto"}} className="card">
         <table style={{minWidth:520}}>
           <thead>
@@ -2110,39 +2142,43 @@ function ShiftManager({ employees, gSch, shifts, onReload, showToast }) {
                   </div>
                 </td>
                 {dates.map(date=>{
-                  const shift=getShift(emp.id,date);
-                  const def=getDefType(emp.id,date);
-                  const eff=shift?.type||def;
-                  const isOv=!!shift;
-                  // Style based on effective + whether it's an override
+                  const shift    = getShift(emp.id,date);
+                  const def      = getDefType(emp.id,date);
+                  const eff      = shift?.type||def;
+                  const isOv     = !!shift;
+                  const isPending= swapPending?.empId===emp.id && swapPending?.date===date;
+                  const isTarget = !!swapPending && !isPending;
                   let bg,col,icon;
-                  if(eff==="work"&&isOv&&def==="off"){bg="var(--yellowBg)";col="var(--yellow)";icon="🔄";}
-                  else if(eff==="work"){bg="var(--accBg)";col="var(--acc)";icon="🟢";}
-                  else if(eff==="off"&&isOv&&def==="work"){bg="var(--redBg)";col="var(--red)";icon="🔴";}
-                  else{bg="var(--card2)";col="var(--tx3)";icon="⬜";}
+                  if(isPending)                            {bg="var(--yellowBg)";col="var(--yellow)";icon="⏳";}
+                  else if(eff==="work"&&isOv&&def==="off") {bg="var(--yellowBg)";col="var(--yellow)";icon="🔄";}
+                  else if(eff==="work")                    {bg="var(--accBg)";   col="var(--acc)";   icon="🟢";}
+                  else if(eff==="off"&&isOv&&def==="work") {bg="var(--redBg)";   col="var(--red)";   icon="🔴";}
+                  else                                     {bg="var(--card2)";   col="var(--tx3)";   icon="⬜";}
                   return(
                     <td key={date} style={{textAlign:"center",padding:"6px 4px"}}>
                       <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                        <button disabled={busy} onClick={()=>{
-                          const noteKey=`${date}|${emp.id}`;
-                          const swapWithId = swapPartner[emp.id]||swapNotes[noteKey]||"";
-                          if(eff==="work"){
-                            saveShift(emp.id,date,"off","","",swapWithId);
-                          } else {
-                            const empObj=employees.find(e=>e.id===emp.id);
-                            const s2=getScheduleForDate(date,empObj,gSch);
-                            const st=shift?.startTime||s2?.startTime||gSch?.startTime||"08:00";
-                            const et=shift?.endTime  ||s2?.endTime  ||gSch?.endTime  ||"20:00";
-                            saveShift(emp.id,date,"work",st,et,swapWithId);
-                          }
-                        }} style={{width:40,height:34,background:bg,color:col,border:`1.5px solid ${col}40`,borderRadius:9,fontSize:14,cursor:"pointer",position:"relative",transition:"all .15s"}}>
+                        <button
+                          disabled={busy}
+                          onClick={()=>handleCellClick(emp,date)}
+                          style={{
+                            width:40,height:34,background:bg,color:col,
+                            border:`1.5px solid ${isPending?"var(--yellow)":isTarget?"var(--acc)":""+col+"40"}`,
+                            borderRadius:9,fontSize:14,cursor:"pointer",
+                            position:"relative",transition:"all .15s",
+                            boxShadow:isPending?"0 0 0 2px var(--yellow)":isTarget?"0 0 0 2px var(--acc)30":"none",
+                          }}>
                           {icon}
-                          {isOv&&<span style={{position:"absolute",top:-3,right:-3,width:7,height:7,background:"var(--yellow)",borderRadius:"50%",border:"1px solid var(--bg)"}}/>}
+                          {isOv&&!isPending&&<span style={{position:"absolute",top:-3,right:-3,width:7,height:7,background:"var(--yellow)",borderRadius:"50%",border:"1px solid var(--bg)"}}/>}
                         </button>
                         {isOv&&(
                           <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                            <button onClick={()=>saveShift(emp.id,date,"default")} disabled={busy} style={{background:"none",color:"var(--tx3)",border:"none",fontSize:9,cursor:"pointer",lineHeight:1}}>รีเซ็ต</button>
-                            {shift?.note&&<span style={{fontSize:8,color:"var(--yellow)",maxWidth:40,textAlign:"center",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={`สลับกับ: ${employees.find(e=>e.id===shift.note)?.name||shift.note}`}>↔{employees.find(e=>e.id===shift.note)?.name||shift.note}</span>}
+                            <button onClick={e=>{e.stopPropagation();saveShift(emp.id,date,"default");}} disabled={busy} style={{background:"none",color:"var(--tx3)",border:"none",fontSize:9,cursor:"pointer",lineHeight:1}}>รีเซ็ต</button>
+                            {shift?.note&&(
+                              <span style={{fontSize:8,color:"var(--yellow)",maxWidth:44,textAlign:"center",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}
+                                title={`สลับกับ: ${employees.find(e=>e.id===shift.note)?.name||shift.note}`}>
+                                ↔{employees.find(e=>e.id===shift.note)?.name||shift.note}
+                              </span>
+                            )}
                           </div>
                         )}
                       </div>
@@ -2156,11 +2192,11 @@ function ShiftManager({ employees, gSch, shifts, onReload, showToast }) {
       </div>
 
       <div className="card2" style={{padding:"11px 16px",marginTop:12,fontSize:12,color:"var(--tx2)",lineHeight:2}}>
-        <b style={{color:"var(--tx)"}}>วิธีใช้</b><br/>
-        1. เลือก "สลับกับ" ของพนักงานที่ต้องการ (ถ้ามีคู่สลับ)<br/>
-        2. กดปุ่มในตารางเพื่อบันทึก 🟢↔️⬜<br/>
-        3. กด <b>⬇ Export CSV</b> เพื่อดาวน์โหลดตารางสลับพร้อมชื่อคู่สลับ<br/>
-        จุดสีเหลือง = ต่างจากตารางปกติ · ↔ ใต้ปุ่ม = ชื่อคู่สลับ · "รีเซ็ต" = กลับค่าเดิม
+        <b style={{color:"var(--tx)"}}>วิธีสลับวันหยุด</b><br/>
+        1. กดวันของ <b>คนแรก</b> → แถบเหลืองจะขึ้นว่า "รอเลือกอีกฝั่ง"<br/>
+        2. กดวันของ <b>คนที่สอง</b> → บันทึกทั้งคู่พร้อมชื่อคู่สลับทันที ✅<br/>
+        3. กด <b>⬇ Export CSV</b> — คอลัมน์ "สลับกับ(ชื่อ)" จะมีชื่อครบ<br/>
+        <span style={{color:"var(--tx3)"}}>กดซ้ำเซลล์เดิม = ยกเลิก · จุดเหลือง = override · ↔ = คู่สลับ · "รีเซ็ต" = กลับค่าเดิม</span>
       </div>
     </div>
   );
