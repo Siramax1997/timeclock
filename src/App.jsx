@@ -654,18 +654,7 @@ export default function App() {
 function PublicBoard({ employees, records, gSch, clinic, onLogin }) {
   const [now, setNow] = useState(new Date());
   useEffect(()=>{
-    const t=setInterval(()=>{
-      setNow(new Date());
-      // ── GPS expiry check ──
-      setGpsAt(prev=>{
-        if(prev && Date.now()-prev > GPS_TTL){
-          setGps("idle");
-          setGMsg("⏱ พิกัดหมดอายุ — กรุณาตรวจสอบใหม่");
-          return null;
-        }
-        return prev;
-      });
-    },1000);
+    const t=setInterval(()=>setNow(new Date()),1000);
     return()=>clearInterval(t);
   },[]);
   const staff = employees.filter(e => e.role !== "admin");
@@ -1996,6 +1985,7 @@ function ShiftManager({ employees, gSch, shifts, onReload, showToast }) {
   const [weekOffset, setWeekOffset] = useState(0);
   const [busy, setBusy] = useState(false);
   const [swapNotes, setSwapNotes] = useState({}); // {"date|empId": "swapWithId"}
+  const [swapPartner, setSwapPartner] = useState({}); // {"empId": "partnerEmpId"} — เก็บคู่สลับรอไว้
 
   const getWeekDates = (offset=0) => {
     const now = new Date();
@@ -2075,12 +2065,11 @@ function ShiftManager({ employees, gSch, shifts, onReload, showToast }) {
               <span style={{fontSize:14}}>{emp.avatar||"🐾"}</span>
               <span style={{fontSize:12,color:"var(--tx)",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{emp.name}</span>
               <select
-                value={""}
+                value={swapPartner[emp.id]||""}
                 onChange={e=>{
-                  // Set swapNotes for all selected dates
                   const partner = e.target.value;
-                  // We just store the preference - user then clicks the date cell
-                  showToast(true, `✅ ${emp.name} ↔ ${employees.find(x=>x.id===partner)?.name||partner}`);
+                  setSwapPartner(prev=>({...prev,[emp.id]:partner}));
+                  if(partner) showToast(true, `✅ ${emp.name} จะสลับกับ ${employees.find(x=>x.id===partner)?.name||partner} — กดวันในตารางได้เลย`);
                 }}
                 style={{width:90,padding:"3px 6px",fontSize:11,borderRadius:7,background:"var(--card)",border:"1px solid var(--br)",color:"var(--tx)"}}
               >
@@ -2136,7 +2125,7 @@ function ShiftManager({ employees, gSch, shifts, onReload, showToast }) {
                       <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
                         <button disabled={busy} onClick={()=>{
                           const noteKey=`${date}|${emp.id}`;
-                          const swapWithId = swapNotes[noteKey]||"";
+                          const swapWithId = swapPartner[emp.id]||swapNotes[noteKey]||"";
                           if(eff==="work"){
                             saveShift(emp.id,date,"off","","",swapWithId);
                           } else {
