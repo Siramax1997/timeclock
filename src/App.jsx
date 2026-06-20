@@ -1225,6 +1225,7 @@ function Login({employees,err,clinic,onLogin,onRetry,onBoard}){
   const[error,setError] = useState("");
   const[shake,setShake] = useState(false);
   const[now,setNow]     = useState(new Date());
+  const[busy,setBusy]   = useState(false);
   const pinRef = useRef(null);
 
   useEffect(()=>{
@@ -1248,16 +1249,20 @@ function Login({employees,err,clinic,onLogin,onRetry,onBoard}){
     if(!checked){ lsDel(SK_PIN); } // Clear saved PIN immediately when unchecked
   };
 
-  const go=()=>{
+  // ✅ ตรวจ PIN ที่ฝั่ง backend แทนการเทียบจาก employees array ในเครื่อง (กัน PIN หลุด)
+  const go=async()=>{
     const uid=id.trim().toUpperCase();
-    const u=employees.find(e=>e.id===uid&&String(e.pin)===String(pin));
-    if(u){
+    if(!uid||!pin){ setError("กรอกรหัสพนักงานและ PIN ให้ครบ"); return; }
+    setBusy(true); setError("");
+    const r = await call("login",{id:uid,pin});
+    setBusy(false);
+    if(r.success && r.user){
       lsSet(SK_ID,uid);
       if(remember){ lsSet(SK_PIN,pin); lsSet(SK_REM,"1"); }
       else { lsDel(SK_PIN); lsSet(SK_REM,"0"); }
-      onLogin(u);
+      onLogin(r.user);
     } else {
-      setError("รหัสพนักงานหรือ PIN ไม่ถูกต้อง");
+      setError(r.message||"รหัสพนักงานหรือ PIN ไม่ถูกต้อง");
       setPin("");
       if(remember){ lsDel(SK_PIN); } // Clear wrong PIN from storage
       setShake(true); setTimeout(()=>setShake(false),500);
@@ -1351,8 +1356,8 @@ function Login({employees,err,clinic,onLogin,onRetry,onBoard}){
 
           {error&&<div style={{background:"var(--redBg)",border:"1px solid var(--red)50",borderRadius:9,padding:"10px 14px",marginBottom:14,fontSize:13,color:"var(--red)"}}>✗ {error}</div>}
 
-          <button onClick={go} style={{width:"100%",padding:13,background:"linear-gradient(135deg,var(--acc),var(--acc2))",color:"#fff",fontWeight:700,fontSize:15,borderRadius:12,boxShadow:"0 4px 20px var(--accBg)",letterSpacing:.5}}>
-            เข้าสู่ระบบ →
+          <button onClick={go} disabled={busy} style={{width:"100%",padding:13,background:"linear-gradient(135deg,var(--acc),var(--acc2))",color:"#fff",fontWeight:700,fontSize:15,borderRadius:12,boxShadow:"0 4px 20px var(--accBg)",letterSpacing:.5}}>
+            {busy?"กำลังตรวจสอบ...":"เข้าสู่ระบบ →"}
           </button>
           <button onClick={onBoard} style={{width:"100%",padding:11,background:"transparent",color:"var(--tx2)",border:"1px solid var(--br)",borderRadius:12,fontSize:13,marginTop:8}}>
             👥 ดูสถานะทีมงาน (ไม่ต้อง login)
