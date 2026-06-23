@@ -8,6 +8,29 @@ const call = async (action, params = {}) => {
     return JSON.parse(await r.text());
   } catch (e) { return { success: false, message: String(e) }; }
 };
+
+// ─── Pending Queue — กันเช็คอินหาย ถ้ามือถือ kill app กลางอากาศ ──────────────
+// เก็บ action ที่ยังไม่ถึง server ไว้ใน localStorage
+// เปิดแอปครั้งถัดไปจะ retry อัตโนมัติ
+const PQ_KEY = "tv_pending_queue";
+const pqLoad  = () => { try { return JSON.parse(localStorage.getItem(PQ_KEY)||"[]"); } catch { return []; } };
+const pqSave  = (q) => { try { localStorage.setItem(PQ_KEY, JSON.stringify(q)); } catch {} };
+const pqAdd   = (item) => { const q = pqLoad(); q.push(item); pqSave(q); };
+const pqRemove= (action, empId) => { pqSave(pqLoad().filter(i => !(i.action===action && i.params.empId===empId))); };
+const pqFlush = async (onRetried) => {
+  const q = pqLoad();
+  if (!q.length) return 0;
+  const failed = [];
+  for (const item of q) {
+    try {
+      const r = await call(item.action, item.params);
+      if (!r.success) failed.push(item);
+      else if (onRetried) onRetried(item);
+    } catch { failed.push(item); }
+  }
+  pqSave(failed);
+  return q.length - failed.length;
+};
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const haversine = (a,b,c,d) => {
   const R=6371000,dL=((c-a)*Math.PI)/180,dO=((d-b)*Math.PI)/180;
@@ -1394,6 +1417,7 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
   const[pf,setPf]=useState({});
   const[showEmoji,setShowEmoji]=useState(false);
   const[newPin,setNewPin]=useState("");const[cfPin,setCfPin]=useState("");const[showPin,setShowPin]=useState(false);
+  const[retryBanner,setRetryBanner]=useState(null); // null | { count, success }
   useEffect(()=>{
     const t=setInterval(()=>{
       setNow(new Date());
@@ -1416,8 +1440,42 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
   // Sync from server — use ref to track initialization, avoids overwriting optimistic updates
   const syncedFromServer = useRef(false);
   useEffect(()=>{
-    // Reset sync flag when user changes (re-login)
     syncedFromServer.current = false;
+  },[user.id]);
+
+  // ── Auto-retry pending queue ตอนเปิดแอป/กลับมาจาก background ──────────────
+  useEffect(()=>{
+    const q = pqLoad().filter(i => i.params.empId === user.id);
+    if(!q.length) return;
+    // มี queue รอ retry → แจ้งเตือน แล้ว flush
+    setRetryBanner({ count:q.length, success:null });
+    pqFlush((item)=>{
+      // sync local state ถ้า retry สำเร็จ
+      if(item.action==="checkIn")    setLocalCI(item.params.time);
+      if(item.action==="checkOut")   setLocalCO(item.params.time);
+      if(item.action==="breakStart") setLocalBS(item.params.time);
+      if(item.action==="breakEnd")   setLocalBE(item.params.time);
+    }).then(n=>{
+      setRetryBanner({ count:q.length, success:n });
+      setTimeout(()=>{ setRetryBanner(null); onReloadRec(); }, 4000);
+    });
+  },[user.id]);
+
+  // ── Visibility change — retry เมื่อกลับมาจาก background ──────────────────
+  useEffect(()=>{
+    const onVisible = () => {
+      if(document.visibilityState !== "visible") return;
+      const q = pqLoad().filter(i => i.params.empId === user.id);
+      if(!q.length) return;
+      pqFlush((item)=>{
+        if(item.action==="checkIn")    setLocalCI(item.params.time);
+        if(item.action==="checkOut")   setLocalCO(item.params.time);
+        if(item.action==="breakStart") setLocalBS(item.params.time);
+        if(item.action==="breakEnd")   setLocalBE(item.params.time);
+      }).then(n=>{ if(n>0){ showToast(true,`🔄 sync ${n} รายการสำเร็จ`); onReloadRec(); } });
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
   },[user.id]);
 
   useEffect(()=>{
@@ -1483,16 +1541,19 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
     if(gps!=="ok"||busy||localCI||effectiveRec.checkIn) return;
     setBusy(true);
     const time = nowISO();
-    setLocalCI(time); // Immediately update UI
-    const r = await call("checkIn",{date:today(),empId:user.id,time,lat:gd.lat,lng:gd.lng});
+    const params = {date:today(),empId:user.id,time,lat:gd.lat,lng:gd.lng};
+    setLocalCI(time); // Optimistic update ทันที
+    pqAdd({action:"checkIn", params}); // 💾 เก็บไว้ก่อน — กันหาย ถ้าแอปถูก kill
+    const r = await call("checkIn", params);
     if(r.success){
+      pqRemove("checkIn", user.id); // ✅ ถึง server แล้ว ลบออกจาก queue
       playSound("checkin"); showToast(true, "เช็คอินสำเร็จ ✓ "+ft(time));
       if(r.alreadyCheckedIn && r.checkIn) setLocalCI(r.checkIn);
-      // Reload after 4s to let Sheet propagate
       setTimeout(()=>onReloadRec(), 4000);
     } else {
-      setLocalCI(null); // Rollback
-      showToast(false, r.message||"เช็คอินไม่สำเร็จ");
+      // ไม่ลบออกจาก queue — จะ retry ตอนเปิดแอปครั้งถัดไป
+      showToast(false, (r.message||"เช็คอินไม่สำเร็จ") + " (จะลองใหม่อัตโนมัติ)");
+      // ไม่ rollback localCI เพราะอาจเป็นแค่เน็ตช้าชั่วคราว
     }
     setBusy(false);
   };
@@ -1500,22 +1561,23 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
   const doOut = async () => {
     if(gps!=="ok"||busy||localCO||effectiveRec.checkOut) return;
     if(!effectiveRec.checkIn){ showToast(false,"กรุณาเช็คอินก่อน"); return; }
-    // ⚠️ ยืนยันก่อนเช็คเอาท์
     const _ct = new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit",timeZone:"Asia/Bangkok"});
     const _msg = "ยืนยันเช็คเอาท์ออกงาน?" + "\n\n" + "⏰ เวลาปัจจุบัน: " + _ct + (onBreak ? "\n\n⚠️ กำลังพักอยู่! กด กลับมาแล้ว ก่อนดีกว่า" : "");
     const confirmed = window.confirm(_msg);
     if(!confirmed) return;
     setBusy(true);
     const time = nowISO();
+    const params = {date:today(),empId:user.id,time,lat:gd.lat,lng:gd.lng};
     setLocalCO(time);
-    const r = await call("checkOut",{date:today(),empId:user.id,time,lat:gd.lat,lng:gd.lng});
+    pqAdd({action:"checkOut", params}); // 💾 เก็บไว้ก่อน
+    const r = await call("checkOut", params);
     if(r.success){
+      pqRemove("checkOut", user.id);
       playSound("checkout"); showToast(true, "เช็คเอาท์สำเร็จ ✓ "+ft(time));
       if(r.alreadyCheckedOut && r.checkOut) setLocalCO(r.checkOut);
       setTimeout(()=>onReloadRec(), 4000);
     } else {
-      setLocalCO(null);
-      showToast(false, r.message||"เช็คเอาท์ไม่สำเร็จ");
+      showToast(false, (r.message||"เช็คเอาท์ไม่สำเร็จ") + " (จะลองใหม่อัตโนมัติ)");
     }
     setBusy(false);
   };
@@ -1533,13 +1595,16 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
     if(!effectiveRec.checkIn||effectiveRec.checkOut) return;
     setBusy(true);
     const time = nowISO();
+    const params = {date:today(),empId:user.id,time,lat:gd.lat,lng:gd.lng};
     setLocalBS(time);
-    const r = await call("breakStart",{date:today(),empId:user.id,time,lat:gd.lat,lng:gd.lng});
+    pqAdd({action:"breakStart", params}); // 💾
+    const r = await call("breakStart", params);
     if(r.success){
+      pqRemove("breakStart", user.id);
       if(r.alreadyStarted && r.breakStart) setLocalBS(r.breakStart);
       playSound("breakstart"); showToast(true,"เริ่มพักแล้ว ☕ "+ft(time));
       setTimeout(()=>onReloadRec(),4000);
-    } else { setLocalBS(null); showToast(false,r.message||"ผิดพลาด"); }
+    } else { showToast(false,(r.message||"ผิดพลาด")+" (จะลองใหม่อัตโนมัติ)"); }
     setBusy(false);
   };
   const doBreakEnd = async () => {
@@ -1555,13 +1620,16 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
     if(!localBS && bs) setLocalBS(bs); // sync if missing
     setBusy(true);
     const time = nowISO();
+    const params = {date:today(),empId:user.id,time,lat:gd.lat,lng:gd.lng};
     setLocalBE(time);
-    const r = await call("breakEnd",{date:today(),empId:user.id,time,lat:gd.lat,lng:gd.lng});
+    pqAdd({action:"breakEnd", params}); // 💾
+    const r = await call("breakEnd", params);
     if(r.success){
+      pqRemove("breakEnd", user.id);
       if(r.alreadyEnded && r.breakEnd) setLocalBE(r.breakEnd);
       playSound("breakend"); showToast(true,"กลับมาแล้ว ✓ "+ft(time));
       setTimeout(()=>onReloadRec(),4000);
-    } else { setLocalBE(null); showToast(false,r.message||"ผิดพลาด"); }
+    } else { showToast(false,(r.message||"ผิดพลาด")+" (จะลองใหม่อัตโนมัติ)"); }
     setBusy(false);
   };
   const doLeave = async () => {
@@ -1703,6 +1771,25 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
       {/* CHECKIN TAB */}
       {tab==="checkin"&&(
         <div className="fade">
+          {/* 🔄 Retry banner — แสดงเมื่อมี pending action ที่ยังไม่ถึง server */}
+          {retryBanner && (
+            <div style={{
+              padding:"11px 16px",marginBottom:10,borderRadius:12,display:"flex",alignItems:"center",gap:10,
+              background: retryBanner.success===null ? "var(--yellowBg)" : retryBanner.success>0 ? "var(--accBg)" : "var(--redBg)",
+              border: `1px solid ${retryBanner.success===null ? "var(--yellow)" : retryBanner.success>0 ? "var(--acc)" : "var(--red)"}`,
+              animation:"fd .3s ease"
+            }}>
+              <span style={{fontSize:20,animation:retryBanner.success===null?"spin .8s linear infinite":""}}>{retryBanner.success===null?"🔄":retryBanner.success>0?"✅":"⚠"}</span>
+              <div>
+                <div style={{fontSize:13,fontWeight:700,color:retryBanner.success===null?"var(--yellow)":retryBanner.success>0?"var(--acc)":"var(--red)"}}>
+                  {retryBanner.success===null ? `กำลัง sync ${retryBanner.count} รายการที่ค้างอยู่...` : retryBanner.success>0 ? `✓ sync ${retryBanner.success} รายการสำเร็จแล้ว` : "sync ไม่สำเร็จ — จะลองอีกครั้งเมื่อเปิดแอป"}
+                </div>
+                <div style={{fontSize:11,color:"var(--tx2)"}}>
+                  {retryBanner.success===null ? "พบข้อมูลที่ยังไม่ถึง server จากครั้งที่แล้ว" : retryBanner.success>0 ? "ข้อมูลเช็คอิน/เช็คเอาท์ถูกบันทึกเรียบร้อยแล้ว" : "กรุณาตรวจสอบสัญญาณอินเทอร์เน็ต"}
+                </div>
+              </div>
+            </div>
+          )}
           {/* Who's on break — visible to everyone */}
           {(()=>{
             const breakingNow = empList.filter(e=>{
