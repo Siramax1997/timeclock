@@ -276,7 +276,7 @@ const THEMES = [
   { id:"sakurafall", name:"ซากุระร่วง 🌸",         emoji:"🌸", dark:true,  bg:"#1a0010",bg2:"#240018",bg3:"#12000b", card:"rgba(255,255,255,.07)",card2:"rgba(255,255,255,.1)",  br:"rgba(255,182,213,.18)",br2:"rgba(255,182,213,.3)", tx:"rgba(255,255,255,.96)",tx2:"rgba(255,210,230,.6)",tx3:"rgba(255,182,213,.32)", acc:"#ff90c0",acc2:"#ffb6d9", aB:"rgba(255,144,192,.14)",rB:"rgba(255,80,100,.14)",yB:"rgba(255,210,100,.14)",pB:"rgba(220,100,255,.14)",oB:"rgba(255,140,80,.14)", red:"#ff6080",yellow:"#ffd966",purple:"#e080ff",orange:"#ff9966" },
 
   // Pastel Sky: ฟ้าพาสเทล ตัวหนังสือขาว
-  { id:"pastelsky",  name:"ฟ้าพาสเทล ☁️",          emoji:"☁️", dark:false, bg:"#a8d8f0",bg2:"#b8e0f7",bg3:"#90c8e8", card:"rgba(255,255,255,.45)",card2:"rgba(255,255,255,.6)", br:"rgba(255,255,255,.5)",br2:"rgba(255,255,255,.7)", tx:"rgba(255,255,255,.97)",tx2:"rgba(255,255,255,.72)",tx3:"rgba(255,255,255,.45)", acc:"#ffffff",acc2:"#e0f4ff", aB:"rgba(255,255,255,.25)",rB:"rgba(255,120,140,.18)",yB:"rgba(255,240,160,.2)",pB:"rgba(200,160,255,.18)",oB:"rgba(255,190,120,.18)", red:"#ff7090",yellow:"#f0c040",purple:"#b090f0",orange:"#f0a060" },
+  { id:"pastelsky",  name:"ฟ้าพาสเทล ☁️",          emoji:"☁️", dark:false, bg:"#a8d8f0",bg2:"#b8e0f7",bg3:"#90c8e8", card:"rgba(255,255,255,.45)",card2:"rgba(255,255,255,.6)", br:"rgba(255,255,255,.5)",br2:"rgba(255,255,255,.7)", tx:"rgba(10,40,100,.9)",tx2:"rgba(10,40,100,.6)",tx3:"rgba(10,40,100,.35)", acc:"#1a5cb8",acc2:"#1e7fd4", aB:"rgba(26,92,184,.12)",rB:"rgba(220,38,38,.1)",yB:"rgba(180,120,0,.1)",pB:"rgba(100,60,200,.1)",oB:"rgba(200,80,0,.1)", red:"#c02030",yellow:"#a06000",purple:"#5020c0",orange:"#c05000" },
 ];
 const TV = t => ({
   "--bg":t.bg,"--bg2":t.bg2,"--bg3":t.bg3,
