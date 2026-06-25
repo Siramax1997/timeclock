@@ -271,6 +271,12 @@ const THEMES = [
 
   // Firework: พื้นดำสนิท ตัวหนังสือขาว พลุปุ้งๆ
   { id:"firework",  name:"พลุ 🎆",                emoji:"🎆", dark:true,  bg:"#000000",bg2:"#050505",bg3:"#000000", card:"rgba(255,255,255,.07)",card2:"rgba(255,255,255,.1)",  br:"rgba(255,255,255,.12)",br2:"rgba(255,255,255,.22)", tx:"rgba(255,255,255,.96)",tx2:"rgba(255,255,255,.55)",tx3:"rgba(255,255,255,.28)", acc:"#ffffff",acc2:"#ffe066", aB:"rgba(255,255,255,.1)",rB:"rgba(255,80,80,.15)",yB:"rgba(255,220,0,.15)",pB:"rgba(200,100,255,.15)",oB:"rgba(255,140,0,.15)", red:"#ff5050",yellow:"#ffe066",purple:"#cc66ff",orange:"#ff9900" },
+
+  // Sakura Fall: ดอกซากุระร่วง พื้นชมพูอ่อนมาก ตัวหนังสือขาว
+  { id:"sakurafall", name:"ซากุระร่วง 🌸",         emoji:"🌸", dark:true,  bg:"#1a0010",bg2:"#240018",bg3:"#12000b", card:"rgba(255,255,255,.07)",card2:"rgba(255,255,255,.1)",  br:"rgba(255,182,213,.18)",br2:"rgba(255,182,213,.3)", tx:"rgba(255,255,255,.96)",tx2:"rgba(255,210,230,.6)",tx3:"rgba(255,182,213,.32)", acc:"#ff90c0",acc2:"#ffb6d9", aB:"rgba(255,144,192,.14)",rB:"rgba(255,80,100,.14)",yB:"rgba(255,210,100,.14)",pB:"rgba(220,100,255,.14)",oB:"rgba(255,140,80,.14)", red:"#ff6080",yellow:"#ffd966",purple:"#e080ff",orange:"#ff9966" },
+
+  // Pastel Sky: ฟ้าพาสเทล ตัวหนังสือขาว
+  { id:"pastelsky",  name:"ฟ้าพาสเทล ☁️",          emoji:"☁️", dark:false, bg:"#a8d8f0",bg2:"#b8e0f7",bg3:"#90c8e8", card:"rgba(255,255,255,.45)",card2:"rgba(255,255,255,.6)", br:"rgba(255,255,255,.5)",br2:"rgba(255,255,255,.7)", tx:"rgba(255,255,255,.97)",tx2:"rgba(255,255,255,.72)",tx3:"rgba(255,255,255,.45)", acc:"#ffffff",acc2:"#e0f4ff", aB:"rgba(255,255,255,.25)",rB:"rgba(255,120,140,.18)",yB:"rgba(255,240,160,.2)",pB:"rgba(200,160,255,.18)",oB:"rgba(255,190,120,.18)", red:"#ff7090",yellow:"#f0c040",purple:"#b090f0",orange:"#f0a060" },
 ];
 const TV = t => ({
   "--bg":t.bg,"--bg2":t.bg2,"--bg3":t.bg3,
@@ -546,6 +552,168 @@ function AnimBG({ themeId }) {
           ctx.beginPath(); ctx.arc(s.x%W,s.y%H,s.r,0,Math.PI*2);
           ctx.fillStyle=`rgba(255,255,255,${a})`; ctx.fill();
         });
+
+      } else if(th.id==="sakurafall") {
+        // === SAKURA FALL: ดอกซากุระร่วงหล่น ===
+        if(!draw._sk){
+          draw._sk = Array.from({length:90},(_,i)=>({
+            x: Math.random()*2000,
+            y: Math.random()*1400 - 200,
+            size: 5+Math.random()*10,
+            rot: Math.random()*Math.PI*2,
+            rotSpd: (Math.random()-.5)*0.04,
+            spd: 0.6+Math.random()*1.4,
+            drift: (Math.random()-.5)*0.5,
+            sway: Math.random()*Math.PI*2,
+            swaySpd: 0.015+Math.random()*0.02,
+            swayAmt: 0.4+Math.random()*0.8,
+            alpha: 0.25+Math.random()*0.55,
+            hue: 330+Math.floor(Math.random()*30), // ชมพู-แดง
+            type: Math.floor(Math.random()*3), // 0=กลีบเล็ก 1=กลีบใหญ่ 2=ดอกเต็ม
+          }));
+        }
+
+        // วาดกลีบซากุระแต่ละกลีบ
+        const drawPetal = (cx,cy,size,rot,type,hue,alpha) => {
+          ctx.save();
+          ctx.globalAlpha = alpha;
+          ctx.translate(cx,cy);
+          ctx.rotate(rot);
+
+          if(type===2) {
+            // ดอกเต็ม 5 กลีบ (เล็กกว่า)
+            const s = size*0.55;
+            for(let i=0;i<5;i++){
+              ctx.save();
+              ctx.rotate((Math.PI*2/5)*i);
+              ctx.beginPath();
+              ctx.moveTo(0,0);
+              ctx.bezierCurveTo(-s*0.5,-s*0.6, -s*0.2,-s*1.3, 0,-s*1.4);
+              ctx.bezierCurveTo( s*0.2,-s*1.3,  s*0.5,-s*0.6, 0,0);
+              const g2=ctx.createRadialGradient(0,-s*0.7,0,0,-s*0.7,s);
+              g2.addColorStop(0,`hsla(${hue},100%,92%,1)`);
+              g2.addColorStop(1,`hsla(${hue-10},90%,75%,1)`);
+              ctx.fillStyle=g2; ctx.fill();
+              ctx.restore();
+            }
+            // กลางดอก
+            ctx.beginPath(); ctx.arc(0,0,s*0.25,0,Math.PI*2);
+            ctx.fillStyle=`hsla(${hue+30},80%,88%,0.9)`; ctx.fill();
+
+          } else {
+            // กลีบเดี่ยว รูปหัวใจหัวกลับ
+            const s = type===1 ? size : size*0.7;
+            ctx.beginPath();
+            ctx.moveTo(0, s*0.6);
+            ctx.bezierCurveTo(-s*0.9, s*0.2, -s*0.9,-s*0.7,  0,-s*0.4);
+            ctx.bezierCurveTo( s*0.9,-s*0.7,  s*0.9, s*0.2,  0, s*0.6);
+            const grd=ctx.createRadialGradient(0,0,0,0,0,s);
+            grd.addColorStop(0,`hsla(${hue},95%,93%,1)`);
+            grd.addColorStop(0.5,`hsla(${hue-5},90%,83%,1)`);
+            grd.addColorStop(1,`hsla(${hue-15},85%,72%,0.8)`);
+            ctx.fillStyle=grd; ctx.fill();
+            // เส้นกลางกลีบ
+            ctx.beginPath(); ctx.moveTo(0,s*0.6); ctx.lineTo(0,-s*0.3);
+            ctx.strokeStyle=`hsla(${hue-20},70%,70%,0.4)`; ctx.lineWidth=0.7; ctx.stroke();
+          }
+          ctx.restore();
+        };
+
+        draw._sk.forEach(p=>{
+          p.sway += p.swaySpd;
+          p.x += p.drift + Math.sin(p.sway)*p.swayAmt;
+          p.y += p.spd;
+          p.rot += p.rotSpd + Math.sin(p.sway)*0.01;
+
+          if(p.y > H+30){ p.y=-20; p.x=Math.random()*W; }
+          if(p.x > W+30) p.x=-30;
+          if(p.x < -30)  p.x=W+30;
+
+          drawPetal(p.x, p.y, p.size, p.rot, p.type, p.hue, p.alpha);
+        });
+
+        // ambient glow พื้นหลัง — ไล่สีชมพูจาง
+        const ambG = ctx.createRadialGradient(W*0.5,H*0.3,0,W*0.5,H*0.3,W*0.6);
+        ambG.addColorStop(0,"rgba(255,150,200,0.04)");
+        ambG.addColorStop(1,"rgba(255,150,200,0)");
+        ctx.fillStyle=ambG; ctx.fillRect(0,0,W,H);
+
+      } else if(th.id==="pastelsky") {
+        // === PASTEL SKY: เมฆลอย + ฟองสบู่ + นก ===
+
+        // เมฆ
+        if(!draw._clouds){
+          draw._clouds=Array.from({length:12},(_,i)=>({
+            x:Math.random()*W, y:50+Math.random()*H*0.55,
+            w:100+Math.random()*220, h:40+Math.random()*70,
+            spd:0.18+Math.random()*0.35,
+            alpha:0.18+Math.random()*0.28,
+            puffs: Array.from({length:4+Math.floor(Math.random()*4)},()=>({
+              ox:(Math.random()-.5)*80, oy:(Math.random()-.3)*30,
+              r:22+Math.random()*38,
+            })),
+          }));
+        }
+        draw._clouds.forEach(c=>{
+          c.x+=c.spd;
+          if(c.x>W+c.w+100) c.x=-c.w-100;
+          ctx.save(); ctx.globalAlpha=c.alpha;
+          c.puffs.forEach(p=>{
+            ctx.beginPath();
+            ctx.arc(c.x+p.ox, c.y+p.oy, p.r, 0, Math.PI*2);
+            ctx.fillStyle="rgba(255,255,255,1)"; ctx.fill();
+          });
+          ctx.restore();
+        });
+
+        // ฟองสบู่
+        if(!draw._bubbles){
+          draw._bubbles=Array.from({length:22},()=>({
+            x:Math.random()*W, y:H+Math.random()*200,
+            r:8+Math.random()*28, spd:0.4+Math.random()*0.9,
+            drift:(Math.random()-.5)*0.4, sway:Math.random()*Math.PI*2,
+            swaySpd:0.02+Math.random()*0.03, alpha:0.12+Math.random()*0.22,
+          }));
+        }
+        draw._bubbles.forEach(b=>{
+          b.sway+=b.swaySpd; b.x+=b.drift+Math.sin(b.sway)*0.5; b.y-=b.spd;
+          if(b.y<-b.r*2){ b.y=H+b.r; b.x=Math.random()*W; }
+          ctx.save(); ctx.globalAlpha=b.alpha;
+          // ฟอง
+          ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2);
+          ctx.strokeStyle="rgba(255,255,255,0.7)"; ctx.lineWidth=1.5; ctx.stroke();
+          // highlight
+          ctx.beginPath(); ctx.arc(b.x-b.r*0.3, b.y-b.r*0.35, b.r*0.28, 0, Math.PI*2);
+          ctx.fillStyle="rgba(255,255,255,0.55)"; ctx.fill();
+          ctx.restore();
+        });
+
+        // นกเล็กๆ ลอยเป็น V shape
+        if(!draw._birds){
+          draw._birds=Array.from({length:5},(_,i)=>({
+            x:Math.random()*W, y:60+Math.random()*H*0.35,
+            spd:0.5+Math.random()*0.8, wing:Math.random()*Math.PI*2,
+            wingSpd:0.06+Math.random()*0.06, scale:0.5+Math.random()*0.6,
+          }));
+        }
+        draw._birds.forEach(b=>{
+          b.x+=b.spd; b.wing+=b.wingSpd;
+          if(b.x>W+60) b.x=-60;
+          const wf=Math.sin(b.wing)*8*b.scale;
+          ctx.save(); ctx.globalAlpha=0.35; ctx.strokeStyle="rgba(255,255,255,0.9)";
+          ctx.lineWidth=1.5*b.scale; ctx.lineCap="round";
+          // ปีกซ้าย
+          ctx.beginPath(); ctx.moveTo(b.x,b.y); ctx.quadraticCurveTo(b.x-10*b.scale,b.y-wf,b.x-20*b.scale,b.y-2*b.scale); ctx.stroke();
+          // ปีกขวา
+          ctx.beginPath(); ctx.moveTo(b.x,b.y); ctx.quadraticCurveTo(b.x+10*b.scale,b.y-wf,b.x+20*b.scale,b.y-2*b.scale); ctx.stroke();
+          ctx.restore();
+        });
+
+        // sun glow มุมซ้ายบน
+        const sunG=ctx.createRadialGradient(80,80,0,80,80,200);
+        sunG.addColorStop(0,"rgba(255,255,220,0.18)");
+        sunG.addColorStop(1,"rgba(255,255,220,0)");
+        ctx.fillStyle=sunG; ctx.fillRect(0,0,W,H);
 
       } else {
         // Normal animal emoji float
