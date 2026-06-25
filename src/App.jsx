@@ -255,6 +255,22 @@ const THEMES = [
   { id:"sakura",    name:"ซากุระ 🌸",        emoji:"🌸", dark:false, bg:"#fef2f8",bg2:"#fdf4ff",bg3:"#fff1f5", card:"rgba(255,255,255,.86)",card2:"rgba(255,255,255,.66)", br:"rgba(0,0,0,.08)",br2:"rgba(0,0,0,.13)", tx:"rgba(0,0,0,.82)",tx2:"rgba(0,0,0,.48)",tx3:"rgba(0,0,0,.27)", acc:"#db2777",acc2:"#9333ea", aB:"rgba(219,39,119,.11)",rB:"rgba(220,38,38,.09)",yB:"rgba(202,138,4,.1)",pB:"rgba(124,58,237,.1)",oB:"rgba(234,88,12,.1)", red:"#dc2626",yellow:"#ca8a04",purple:"#7c3aed",orange:"#ea580c" },
   { id:"cyber",     name:"Cyber ⚡",            emoji:"⚡", dark:true,  bg:"#050505",bg2:"#0a0a0a",bg3:"#030303", card:"rgba(255,255,255,.05)",card2:"rgba(255,255,255,.08)", br:"rgba(0,255,200,.18)",br2:"rgba(0,255,200,.32)", tx:"rgba(255,255,255,.95)",tx2:"rgba(255,255,255,.55)",tx3:"rgba(255,255,255,.25)", acc:"#00ffc8",acc2:"#00e5ff", aB:"rgba(0,255,200,.15)",rB:"rgba(255,50,50,.15)",yB:"rgba(255,220,0,.15)",pB:"rgba(180,0,255,.15)",oB:"rgba(255,140,0,.15)", red:"#ff3232",yellow:"#ffd700",purple:"#b400ff",orange:"#ff8c00" },
   { id:"cyberpunk", name:"Cyberpunk 🌆",         emoji:"🌆", dark:true,  bg:"#0d0015",bg2:"#120020",bg3:"#08000f", card:"rgba(255,255,255,.06)",card2:"rgba(255,255,255,.09)", br:"rgba(255,0,200,.2)",br2:"rgba(255,0,200,.35)",  tx:"rgba(255,255,255,.95)",tx2:"rgba(255,255,255,.55)",tx3:"rgba(255,255,255,.25)", acc:"#ff00cc",acc2:"#ffee00", aB:"rgba(255,0,200,.15)",rB:"rgba(255,50,50,.15)",yB:"rgba(255,220,0,.15)",pB:"rgba(200,0,255,.15)",oB:"rgba(255,140,0,.15)", red:"#ff3232",yellow:"#ffee00",purple:"#cc00ff",orange:"#ff6600" },
+
+  // ── Hi-Tech / Developer themes ──────────────────────────────────────────────
+  // Matrix: พื้นดำสนิท accent เขียวสด ✦ classic terminal hacker look
+  { id:"matrix",    name:"Matrix 💚",            emoji:"💚", dark:true,  bg:"#000000",bg2:"#001400",bg3:"#000800", card:"rgba(0,255,65,.04)",card2:"rgba(0,255,65,.07)",  br:"rgba(0,255,65,.15)",br2:"rgba(0,255,65,.28)", tx:"rgba(0,255,65,.95)",tx2:"rgba(0,255,65,.55)",tx3:"rgba(0,255,65,.25)", acc:"#00ff41",acc2:"#39ff14", aB:"rgba(0,255,65,.12)",rB:"rgba(255,50,50,.13)",yB:"rgba(255,220,0,.13)",pB:"rgba(0,255,65,.18)",oB:"rgba(255,140,0,.13)", red:"#ff3232",yellow:"#ccff00",purple:"#00ff41",orange:"#39ff14" },
+
+  // Terminal: พื้นเทาเข้มโทน slate ✦ classic dev terminal สบายตา
+  { id:"terminal",  name:"Terminal 🖥",           emoji:"🖥", dark:true,  bg:"#0d1117",bg2:"#161b22",bg3:"#0a0e13", card:"rgba(255,255,255,.06)",card2:"rgba(255,255,255,.09)", br:"rgba(255,255,255,.1)",br2:"rgba(255,255,255,.16)", tx:"rgba(255,255,255,.92)",tx2:"rgba(255,255,255,.5)",tx3:"rgba(255,255,255,.22)", acc:"#58a6ff",acc2:"#79c0ff", aB:"rgba(88,166,255,.13)",rB:"rgba(248,81,73,.13)",yB:"rgba(210,153,34,.13)",pB:"rgba(188,140,255,.13)",oB:"rgba(255,140,0,.13)", red:"#f85149",yellow:"#d29922",purple:"#bc8cff",orange:"#ffa657" },
+
+  // Synthwave: พื้นม่วงเข้มมาก gradient ส้ม-ชมพู ✦ retro-futuristic 80s vibe
+  { id:"synthwave", name:"Synthwave 🎛",          emoji:"🎛", dark:true,  bg:"#0a0015",bg2:"#10002a",bg3:"#06000f", card:"rgba(255,255,255,.06)",card2:"rgba(255,255,255,.09)", br:"rgba(255,100,200,.18)",br2:"rgba(255,100,200,.3)", tx:"rgba(255,255,255,.95)",tx2:"rgba(255,200,255,.5)",tx3:"rgba(255,200,255,.22)", acc:"#ff6ec7",acc2:"#ff9d00", aB:"rgba(255,110,199,.14)",rB:"rgba(255,50,80,.14)",yB:"rgba(255,200,0,.14)",pB:"rgba(180,80,255,.14)",oB:"rgba(255,120,0,.14)", red:"#ff3255",yellow:"#ffcc00",purple:"#c040ff",orange:"#ff6a00" },
+
+  // Midnight: พื้น navy-black ✦ VSCode dark+ / JetBrains Darcula inspired
+  { id:"midnight",  name:"Midnight 🌃",           emoji:"🌃", dark:true,  bg:"#010409",bg2:"#0d1117",bg3:"#040810", card:"rgba(255,255,255,.05)",card2:"rgba(255,255,255,.08)", br:"rgba(139,148,158,.15)",br2:"rgba(139,148,158,.25)", tx:"rgba(230,237,243,.95)",tx2:"rgba(139,148,158,.85)",tx3:"rgba(139,148,158,.4)", acc:"#e06c75",acc2:"#61afef", aB:"rgba(224,108,117,.13)",rB:"rgba(224,108,117,.2)",yB:"rgba(229,192,123,.13)",pB:"rgba(198,120,221,.13)",oB:"rgba(209,154,102,.13)", red:"#e06c75",yellow:"#e5c07b",purple:"#c678dd",orange:"#d19a66" },
+
+  // Firework: พื้นดำสนิท ตัวหนังสือขาว พลุปุ้งๆ
+  { id:"firework",  name:"พลุ 🎆",                emoji:"🎆", dark:true,  bg:"#000000",bg2:"#050505",bg3:"#000000", card:"rgba(255,255,255,.07)",card2:"rgba(255,255,255,.1)",  br:"rgba(255,255,255,.12)",br2:"rgba(255,255,255,.22)", tx:"rgba(255,255,255,.96)",tx2:"rgba(255,255,255,.55)",tx3:"rgba(255,255,255,.28)", acc:"#ffffff",acc2:"#ffe066", aB:"rgba(255,255,255,.1)",rB:"rgba(255,80,80,.15)",yB:"rgba(255,220,0,.15)",pB:"rgba(200,100,255,.15)",oB:"rgba(255,140,0,.15)", red:"#ff5050",yellow:"#ffe066",purple:"#cc66ff",orange:"#ff9900" },
 ];
 const TV = t => ({
   "--bg":t.bg,"--bg2":t.bg2,"--bg3":t.bg3,
@@ -286,13 +302,113 @@ function AnimBG({ themeId }) {
       frame++;
       ctx.clearRect(0,0,W,H);
       const th=THEMES.find(x=>x.id===tRef.current)||THEMES[0];
-      const isCyber = th.id==="cyber"||th.id==="cyberpunk";
+      const isCyber    = th.id==="cyber"||th.id==="cyberpunk";
+      const isMatrix   = th.id==="matrix";
+      const isTerminal = th.id==="terminal"||th.id==="midnight";
+      const isSynth    = th.id==="synthwave";
+
       // Background gradient
       const g=ctx.createLinearGradient(0,0,W,H);
       g.addColorStop(0,th.bg);g.addColorStop(.5,th.bg2);g.addColorStop(1,th.bg3);
       ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
 
-      if(isCyber) {
+      if(isMatrix) {
+        // === MATRIX: falling green katakana/binary rain ===
+        if(!draw._matrixCols){
+          const colW=18;
+          draw._matrixCols=Array.from({length:Math.ceil(W/colW)+1},(_,i)=>({
+            x:i*colW, y:Math.random()*H, speed:2+Math.random()*4,
+            chars:Array.from({length:28},()=>String.fromCharCode(0x30A0+Math.floor(Math.random()*96))),
+            len:8+Math.floor(Math.random()*18), bright:Math.random()
+          }));
+        }
+        draw._matrixCols.forEach(col=>{
+          col.y+=col.speed;
+          if(col.y>H+col.len*18){ col.y=-col.len*18; col.speed=2+Math.random()*4; col.bright=Math.random(); }
+          col.chars[Math.floor(Math.random()*col.chars.length)]=String.fromCharCode(0x30A0+Math.floor(Math.random()*96));
+          col.chars.forEach((ch,j)=>{
+            const distFromHead=col.len-j;
+            if(distFromHead<0) return;
+            const alpha=Math.max(0,(1-j/col.len)*0.7);
+            ctx.font="bold 13px 'JetBrains Mono',monospace";
+            ctx.textAlign="center";
+            if(j===0) ctx.fillStyle=`rgba(200,255,200,${alpha+0.3})`;
+            else ctx.fillStyle=`rgba(0,255,65,${alpha*col.bright})`;
+            ctx.fillText(ch,col.x,col.y-j*16);
+          });
+        });
+        // Scanlines
+        for(let y=0;y<H;y+=3){ ctx.fillStyle="rgba(0,0,0,0.04)"; ctx.fillRect(0,y,W,1.5); }
+
+      } else if(isTerminal) {
+        // === TERMINAL / MIDNIGHT: floating code snippets ===
+        const CODE = ["const x = 0","fn main()","<div>","git commit","npm run","import {","SELECT *","docker ps","sudo apt","./deploy.sh","class App","return null","async/await","try { }","404 not","200 OK","push(origin)","yarn add","pip install","ssh -i key"];
+        const accentR = th.id==="midnight" ? "224,108,117" : "88,166,255";
+        const accentG = th.id==="midnight" ? "97,175,239"  : "121,192,255";
+        items.forEach(p=>{
+          p.x+=p.vx*.4; p.y+=p.vy*.4+Math.sin(p.bo)*.1; p.bo+=p.bs*.5;
+          if(p.x<-120)p.x=W+80; if(p.x>W+120)p.x=-80;
+          if(p.y<-40)p.y=H+40;  if(p.y>H+40)p.y=-40;
+          ctx.save();
+          ctx.globalAlpha=0.055+Math.sin(p.bo)*0.025;
+          ctx.font=`${10+p.s*0.25}px 'JetBrains Mono',monospace`;
+          ctx.textAlign="left"; ctx.textBaseline="middle";
+          const useAlt = Math.sin(p.phase||0)>0.3;
+          ctx.fillStyle = useAlt ? `rgba(${accentG},1)` : `rgba(${accentR},1)`;
+          ctx.fillText(CODE[Math.floor(p.s*7)%CODE.length], p.x, p.y);
+          ctx.restore();
+        });
+        // Subtle grid
+        ctx.strokeStyle=`rgba(${accentR},0.04)`;ctx.lineWidth=1;
+        for(let x=0;x<W;x+=60){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+        for(let y=0;y<H;y+=60){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+
+      } else if(isSynth) {
+        // === SYNTHWAVE: retro grid horizon + floating neon ===
+        const horizon=H*0.58;
+        // Perspective grid
+        ctx.strokeStyle="rgba(255,110,199,0.13)"; ctx.lineWidth=1;
+        const vlines=16;
+        for(let i=0;i<=vlines;i++){
+          const x=W*(i/vlines);
+          ctx.beginPath();ctx.moveTo(W/2,horizon);ctx.lineTo(x,H);ctx.stroke();
+        }
+        const hlines=10;
+        for(let i=0;i<hlines;i++){
+          const t=Math.pow(i/hlines,2);
+          const y=horizon+(H-horizon)*t;
+          ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();
+        }
+        // Horizon glow
+        const hGrad=ctx.createLinearGradient(0,horizon-30,0,horizon+30);
+        hGrad.addColorStop(0,"rgba(255,110,199,0)");
+        hGrad.addColorStop(0.5,"rgba(255,110,199,0.18)");
+        hGrad.addColorStop(1,"rgba(255,110,199,0)");
+        ctx.fillStyle=hGrad;ctx.fillRect(0,horizon-30,W,60);
+        // Floating neon shapes
+        items.forEach(p=>{
+          p.x+=p.vx*.5; p.y+=p.vy*.3+Math.sin(p.bo)*.3; p.bo+=p.bs*.6; p.a+=p.va*.4;
+          if(p.x<-80)p.x=W+60; if(p.x>W+80)p.x=-60;
+          if(p.y<-80)p.y=H+60; if(p.y>H+80)p.y=-60;
+          ctx.save();
+          ctx.globalAlpha=0.07+Math.sin(p.bo)*0.04;
+          ctx.translate(p.x,p.y);ctx.rotate(p.a);
+          ctx.font=`${p.s*0.7}px 'JetBrains Mono',monospace`;
+          ctx.textAlign="center";ctx.textBaseline="middle";
+          const synthChars=["◆","▲","★","◉","⬡","▶","◀","♦","✦","⊕","⊗","◈"];
+          ctx.fillStyle=Math.sin(p.bo)>0?"rgba(255,110,199,1)":"rgba(255,157,0,1)";
+          ctx.fillText(synthChars[Math.floor(p.s*5)%synthChars.length],0,0);
+          ctx.restore();
+        });
+        // Sun semicircle
+        const sunGrad=ctx.createRadialGradient(W/2,horizon,0,W/2,horizon,120);
+        sunGrad.addColorStop(0,"rgba(255,157,0,0.22)");
+        sunGrad.addColorStop(0.5,"rgba(255,110,199,0.1)");
+        sunGrad.addColorStop(1,"rgba(255,110,199,0)");
+        ctx.fillStyle=sunGrad;
+        ctx.beginPath();ctx.arc(W/2,horizon,120,Math.PI,0);ctx.fill();
+
+      } else if(isCyber) {
         // === CYBER BG: scanlines + grid + floating code chars ===
         const accentCol = th.id==="cyberpunk" ? "255,0,200" : "0,255,200";
         const accentCol2 = th.id==="cyberpunk" ? "255,230,0" : "0,200,255";
@@ -344,6 +460,91 @@ function AnimBG({ themeId }) {
         [[20,20],[W-20,20],[20,H-20],[W-20,H-20]].forEach(([cx,cy])=>{
           const sx=cx<W/2?1:-1, sy=cy<H/2?1:-1;
           ctx.beginPath(); ctx.moveTo(cx,cy+sy*bSize); ctx.lineTo(cx,cy); ctx.lineTo(cx+sx*bSize,cy); ctx.stroke();
+        });
+
+      } else if(th.id==="firework") {
+        // === FIREWORK: พลุระเบิดปุ้งๆ ===
+        if(!draw._fw){ draw._fw=[]; draw._fwp=[]; }
+
+        // spawn พลุใหม่ทุกๆ ~90 frame
+        if(frame%90===0 || draw._fw.length===0){
+          const colors=["255,80,80","255,180,0","80,220,255","200,80,255","80,255,160","255,255,80","255,120,200","100,200,255"];
+          const hue = colors[Math.floor(Math.random()*colors.length)];
+          const cx=W*0.15+Math.random()*W*0.7, cy=H*0.1+Math.random()*H*0.45;
+          const count=60+Math.floor(Math.random()*50);
+          for(let i=0;i<count;i++){
+            const angle=((Math.PI*2)/count)*i + Math.random()*0.3;
+            const spd=1.5+Math.random()*4;
+            draw._fw.push({
+              x:cx, y:cy,
+              vx:Math.cos(angle)*spd, vy:Math.sin(angle)*spd,
+              life:1, decay:0.012+Math.random()*0.018,
+              r:2+Math.random()*2.5, color:hue,
+              trail:[],
+            });
+          }
+          // แฟลชตรงกลาง
+          draw._fwp.push({x:cx,y:cy,r:0,maxR:60+Math.random()*60,color:hue,alpha:0.6});
+        }
+
+        // วาด flash ring
+        draw._fwp = draw._fwp.filter(p=>{
+          p.r+=4; p.alpha-=0.04;
+          if(p.alpha<=0) return false;
+          ctx.beginPath();
+          ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+          ctx.strokeStyle=`rgba(${p.color},${p.alpha})`;
+          ctx.lineWidth=2;
+          ctx.stroke();
+          return true;
+        });
+
+        // วาดอนุภาคพลุ
+        draw._fw = draw._fw.filter(p=>{
+          p.trail.push({x:p.x,y:p.y});
+          if(p.trail.length>8) p.trail.shift();
+          p.x+=p.vx; p.y+=p.vy;
+          p.vy+=0.06; // gravity
+          p.vx*=0.98; p.vy*=0.98;
+          p.life-=p.decay;
+          if(p.life<=0) return false;
+
+          // วาด trail
+          for(let t=0;t<p.trail.length;t++){
+            const ta=(t/p.trail.length)*p.life*0.5;
+            ctx.beginPath();
+            ctx.arc(p.trail[t].x,p.trail[t].y,p.r*(t/p.trail.length)*0.7,0,Math.PI*2);
+            ctx.fillStyle=`rgba(${p.color},${ta})`;
+            ctx.fill();
+          }
+          // วาด head
+          ctx.beginPath();
+          ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+          ctx.fillStyle=`rgba(${p.color},${p.life})`;
+          ctx.fill();
+          // sparkle เล็กๆ
+          if(Math.random()<0.15){
+            ctx.beginPath();
+            ctx.arc(p.x+Math.random()*6-3,p.y+Math.random()*6-3,0.8,0,Math.PI*2);
+            ctx.fillStyle=`rgba(255,255,255,${p.life*0.6})`;
+            ctx.fill();
+          }
+          return true;
+        });
+
+        // ดาวเล็กๆ พื้นหลัง
+        if(!draw._stars){
+          draw._stars=Array.from({length:120},()=>({
+            x:Math.random()*2000, y:Math.random()*1200,
+            r:0.4+Math.random()*1.2, alpha:0.1+Math.random()*0.5,
+            twinkle:Math.random()*Math.PI*2, speed:0.02+Math.random()*0.04
+          }));
+        }
+        draw._stars.forEach(s=>{
+          s.twinkle+=s.speed;
+          const a=s.alpha*(0.5+Math.sin(s.twinkle)*0.5);
+          ctx.beginPath(); ctx.arc(s.x%W,s.y%H,s.r,0,Math.PI*2);
+          ctx.fillStyle=`rgba(255,255,255,${a})`; ctx.fill();
         });
 
       } else {
