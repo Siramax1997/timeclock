@@ -265,6 +265,16 @@ const THEMES = [
 
   // Pastel Sky: ฟ้าพาสเทล ตัวหนังสือขาว
   { id:"pastelsky",  name:"ฟ้าพาสเทล ☁️",          emoji:"☁️", dark:false, bg:"#a8d8f0",bg2:"#b8e0f7",bg3:"#90c8e8", card:"rgba(255,255,255,.45)",card2:"rgba(255,255,255,.6)", br:"rgba(255,255,255,.5)",br2:"rgba(255,255,255,.7)", tx:"rgba(10,40,100,.9)",tx2:"rgba(10,40,100,.6)",tx3:"rgba(10,40,100,.35)", acc:"#1a5cb8",acc2:"#1e7fd4", aB:"rgba(26,92,184,.12)",rB:"rgba(220,38,38,.1)",yB:"rgba(180,120,0,.1)",pB:"rgba(100,60,200,.1)",oB:"rgba(200,80,0,.1)", red:"#c02030",yellow:"#a06000",purple:"#5020c0",orange:"#c05000" },
+
+  // Sunset Beach: ทะเลชายหาดแสงพระอาทิตย์ตก สีสันสดใส
+  { id:"sunset", name:"ซันเซ็ต 🌅", emoji:"🌅", dark:false,
+    bg:"#ff6b35",bg2:"#f7931e",bg3:"#ff4e50",
+    card:"rgba(255,255,255,.22)",card2:"rgba(255,255,255,.32)",
+    br:"rgba(255,255,255,.35)",br2:"rgba(255,255,255,.55)",
+    tx:"rgba(255,255,255,.97)",tx2:"rgba(255,240,200,.8)",tx3:"rgba(255,220,160,.5)",
+    acc:"#fff176",acc2:"#ffe082",
+    aB:"rgba(255,241,118,.2)",rB:"rgba(255,100,100,.2)",yB:"rgba(255,241,118,.25)",pB:"rgba(255,180,255,.2)",oB:"rgba(255,200,100,.2)",
+    red:"#ff1744",yellow:"#ffe000",purple:"#ea80fc",orange:"#ff6d00" },
 ];
 const TV = t => ({
   "--bg":t.bg,"--bg2":t.bg2,"--bg3":t.bg3,
@@ -603,6 +613,259 @@ function AnimBG({ themeId }) {
         sunG.addColorStop(0,"rgba(255,255,220,0.18)");
         sunG.addColorStop(1,"rgba(255,255,220,0)");
         ctx.fillStyle=sunG; ctx.fillRect(0,0,W,H);
+
+      } else if(th.id==="sunset") {
+        // === SUNSET BEACH: ท้องฟ้าไล่สีพระอาทิตย์ตก + ทะเล + คลื่น + นกนางนวล + ดาว ===
+
+        // ── ท้องฟ้า gradient ──
+        const skyH = H * 0.62;
+        const skyG = ctx.createLinearGradient(0,0,0,skyH);
+        skyG.addColorStop(0,   "#1a0533");   // ม่วงเข้มด้านบน
+        skyG.addColorStop(0.18,"#6b1f6e");   // ม่วง
+        skyG.addColorStop(0.38,"#c0392b");   // แดงเข้ม
+        skyG.addColorStop(0.58,"#e8621a");   // ส้มเข้ม
+        skyG.addColorStop(0.78,"#f5a623");   // ส้มทอง
+        skyG.addColorStop(1,   "#fdd870");   // เหลืองทองขอบฟ้า
+        ctx.fillStyle=skyG; ctx.fillRect(0,0,W,skyH);
+
+        // ── พระอาทิตย์ ──
+        const sunX=W*0.62, sunY=skyH*0.78, sunR=48;
+        const sunCore=ctx.createRadialGradient(sunX,sunY,0,sunX,sunY,sunR);
+        sunCore.addColorStop(0,"rgba(255,255,220,1)");
+        sunCore.addColorStop(0.4,"rgba(255,220,80,1)");
+        sunCore.addColorStop(0.75,"rgba(255,140,30,0.9)");
+        sunCore.addColorStop(1,"rgba(255,80,0,0)");
+        ctx.fillStyle=sunCore; ctx.beginPath(); ctx.arc(sunX,sunY,sunR,0,Math.PI*2); ctx.fill();
+        // halo
+        const halo=ctx.createRadialGradient(sunX,sunY,sunR*0.6,sunX,sunY,sunR*3.5);
+        halo.addColorStop(0,"rgba(255,200,80,0.22)");
+        halo.addColorStop(0.5,"rgba(255,120,30,0.08)");
+        halo.addColorStop(1,"rgba(255,80,0,0)");
+        ctx.fillStyle=halo; ctx.beginPath(); ctx.arc(sunX,sunY,sunR*3.5,0,Math.PI*2); ctx.fill();
+        // แสงสะท้อนพระอาทิตย์บนน้ำ
+        const refG=ctx.createLinearGradient(sunX-60,skyH,sunX+60,H);
+        refG.addColorStop(0,"rgba(255,200,80,0.35)");
+        refG.addColorStop(0.5,"rgba(255,140,30,0.15)");
+        refG.addColorStop(1,"rgba(255,100,0,0)");
+        ctx.fillStyle=refG;
+        ctx.beginPath();
+        ctx.moveTo(sunX-18,skyH); ctx.lineTo(sunX+18,skyH);
+        ctx.lineTo(sunX+90,H);    ctx.lineTo(sunX-90,H);
+        ctx.closePath(); ctx.fill();
+
+        // ── เมฆสีชมพู-ม่วง ──
+        if(!draw._sCloud){
+          draw._sCloud=Array.from({length:8},()=>({
+            x:Math.random()*W, y:skyH*0.08+Math.random()*skyH*0.45,
+            spd:0.12+Math.random()*0.22,
+            puffs:Array.from({length:3+Math.floor(Math.random()*4)},()=>({
+              ox:(Math.random()-.5)*90, oy:(Math.random()-.4)*28, r:18+Math.random()*38,
+            })),
+            hue:290+Math.random()*60, alpha:0.18+Math.random()*0.22,
+          }));
+        }
+        draw._sCloud.forEach(c=>{
+          c.x+=c.spd; if(c.x>W+160) c.x=-160;
+          ctx.save(); ctx.globalAlpha=c.alpha;
+          c.puffs.forEach(p=>{
+            const cg=ctx.createRadialGradient(c.x+p.ox,c.y+p.oy,0,c.x+p.ox,c.y+p.oy,p.r);
+            cg.addColorStop(0,`hsla(${c.hue},80%,82%,1)`);
+            cg.addColorStop(1,`hsla(${c.hue-20},70%,65%,0)`);
+            ctx.fillStyle=cg; ctx.beginPath(); ctx.arc(c.x+p.ox,c.y+p.oy,p.r,0,Math.PI*2); ctx.fill();
+          });
+          ctx.restore();
+        });
+
+        // ── ดาวยามเย็น (มุมบน) ──
+        if(!draw._sStar){
+          draw._sStar=Array.from({length:35},()=>({
+            x:Math.random()*W, y:Math.random()*skyH*0.45,
+            r:0.5+Math.random()*1.5, tw:Math.random()*Math.PI*2, tws:0.03+Math.random()*0.04,
+          }));
+        }
+        draw._sStar.forEach(s=>{
+          s.tw+=s.tws;
+          const a=(Math.sin(s.tw)+1)/2*0.6+0.1;
+          ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+          ctx.fillStyle=`rgba(255,240,200,${a})`; ctx.fill();
+        });
+
+        // ── ทะเล gradient ──
+        const seaG=ctx.createLinearGradient(0,skyH,0,H);
+        seaG.addColorStop(0,"#1a4a7a");
+        seaG.addColorStop(0.25,"#1e5f8f");
+        seaG.addColorStop(0.6,"#1565a8");
+        seaG.addColorStop(1,"#0d3d6e");
+        ctx.fillStyle=seaG; ctx.fillRect(0,skyH,W,H-skyH);
+
+        // ── คลื่น ──
+        if(!draw._waves){
+          draw._waves=Array.from({length:5},(_,i)=>({
+            phase:Math.random()*Math.PI*2,
+            y: skyH + (H-skyH)*(0.08+i*0.18),
+            amp: 4+i*2.5, freq:0.008-i*0.001,
+            spd: 0.018-i*0.003,
+            alpha: 0.18-i*0.025,
+            color: i<2?"rgba(255,200,120,":"rgba(100,180,255,",
+          }));
+        }
+        draw._waves.forEach(wv=>{
+          wv.phase+=wv.spd;
+          ctx.beginPath(); ctx.moveTo(0,wv.y);
+          for(let x=0;x<=W;x+=6){
+            ctx.lineTo(x, wv.y+Math.sin(x*wv.freq+wv.phase)*wv.amp);
+          }
+          ctx.strokeStyle=`${wv.color}${wv.alpha})`; ctx.lineWidth=1.8; ctx.stroke();
+          // foam
+          ctx.fillStyle=`${wv.color}${wv.alpha*0.35})`;
+          ctx.fill();
+        });
+
+        // ── ชายหาด + เนินทราย ──
+        const sandY=H*0.84;
+        const sandG=ctx.createLinearGradient(0,sandY,0,H);
+        sandG.addColorStop(0,"#f4c76b");
+        sandG.addColorStop(0.4,"#e8b84b");
+        sandG.addColorStop(1,"#c9973a");
+        ctx.fillStyle=sandG;
+        ctx.beginPath(); ctx.moveTo(0,sandY);
+        // ชายหาดเป็นเส้นโค้งเล็กน้อย
+        for(let x=0;x<=W;x+=8){
+          ctx.lineTo(x, sandY + Math.sin(x*0.012+1.2)*5);
+        }
+        ctx.lineTo(W,H); ctx.lineTo(0,H); ctx.closePath(); ctx.fill();
+        // รอยคลื่นบนทราย
+        [0.88,0.93].forEach(t=>{
+          const wy=H*t;
+          ctx.beginPath(); ctx.moveTo(0,wy);
+          for(let x=0;x<=W;x+=6) ctx.lineTo(x,wy+Math.sin(x*0.015+frame*0.02)*2.5);
+          ctx.strokeStyle="rgba(255,255,255,0.18)"; ctx.lineWidth=1.2; ctx.stroke();
+        });
+
+        // ── ต้นปาล์ม ──
+        const drawPalm=(px,py,scale=1,flip=1)=>{
+          ctx.save(); ctx.translate(px,py);
+          // ลำต้น
+          ctx.beginPath(); ctx.moveTo(0,0);
+          ctx.bezierCurveTo(flip*8*scale,-py*0.3, flip*14*scale,-py*0.65, flip*4*scale,-py);
+          ctx.strokeStyle="#5d3a1a"; ctx.lineWidth=7*scale; ctx.lineCap="round"; ctx.stroke();
+          ctx.strokeStyle="#7d5a2a"; ctx.lineWidth=5*scale; ctx.stroke();
+          // ใบ 6 ใบ
+          const leafAngles=[-70,-45,-20,10,35,60].map(a=>a*Math.PI/180);
+          leafAngles.forEach((ang,i)=>{
+            ctx.save(); ctx.translate(flip*4*scale,-py);
+            ctx.rotate(ang*flip);
+            const len=(55+Math.sin(i*1.2)*15)*scale;
+            ctx.beginPath(); ctx.moveTo(0,0);
+            ctx.bezierCurveTo(len*0.3,-12*scale, len*0.7,-8*scale, len,0);
+            ctx.bezierCurveTo(len*0.7,6*scale, len*0.3,10*scale, 0,0);
+            const lg=ctx.createLinearGradient(0,0,len,0);
+            lg.addColorStop(0,"#2d7a2d"); lg.addColorStop(0.5,"#3a9e3a"); lg.addColorStop(1,"#1f5e1f");
+            ctx.fillStyle=lg; ctx.fill();
+            ctx.restore();
+          });
+          ctx.restore();
+        };
+        drawPalm(W*0.08, H-sandY+10, 1.1, 1);
+        drawPalm(W*0.92, H-sandY+6,  0.9, -1);
+        drawPalm(W*0.15, H-sandY+4,  0.7, 1);
+
+        // ── นกนางนวล ──
+        if(!draw._gulls){
+          draw._gulls=Array.from({length:6},()=>({
+            x:Math.random()*W, y:skyH*0.15+Math.random()*skyH*0.5,
+            spd:0.5+Math.random()*1.2, wing:Math.random()*Math.PI*2,
+            wingSpd:0.055+Math.random()*0.05, scale:0.4+Math.random()*0.7,
+          }));
+        }
+        draw._gulls.forEach(g=>{
+          g.x+=g.spd; g.wing+=g.wingSpd; if(g.x>W+50) g.x=-50;
+          const wf=Math.sin(g.wing)*7*g.scale;
+          ctx.save(); ctx.globalAlpha=0.65;
+          ctx.strokeStyle="rgba(255,230,200,0.95)"; ctx.lineWidth=1.4*g.scale; ctx.lineCap="round";
+          ctx.beginPath(); ctx.moveTo(g.x,g.y); ctx.quadraticCurveTo(g.x-9*g.scale,g.y-wf,g.x-18*g.scale,g.y-1*g.scale); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(g.x,g.y); ctx.quadraticCurveTo(g.x+9*g.scale,g.y-wf,g.x+18*g.scale,g.y-1*g.scale); ctx.stroke();
+          ctx.restore();
+        });
+
+      } else if(th.id==="sakura") {
+        // === SAKURA (light): กลีบซากุระร่วงบนพื้นชมพูอ่อน สีเดิม ===
+
+        // พื้นหลัง gradient อ่อนๆ
+        const bg2G=ctx.createLinearGradient(0,0,W,H);
+        bg2G.addColorStop(0,"#fef2f8"); bg2G.addColorStop(0.5,"#fdf4ff"); bg2G.addColorStop(1,"#fff1f5");
+        ctx.fillStyle=bg2G; ctx.fillRect(0,0,W,H);
+
+        if(!draw._sk2){
+          draw._sk2=Array.from({length:70},()=>({
+            x:Math.random()*W, y:Math.random()*H-100,
+            size:4+Math.random()*9,
+            rot:Math.random()*Math.PI*2,
+            rotSpd:(Math.random()-.5)*0.035,
+            spd:0.5+Math.random()*1.2,
+            drift:(Math.random()-.5)*0.4,
+            sway:Math.random()*Math.PI*2,
+            swaySpd:0.012+Math.random()*0.02,
+            swayAmt:0.3+Math.random()*0.7,
+            alpha:0.2+Math.random()*0.45,
+            hue:330+Math.floor(Math.random()*25),
+            type:Math.floor(Math.random()*3),
+          }));
+        }
+
+        const drawPetal2=(cx,cy,size,rot,type,hue,alpha)=>{
+          ctx.save();
+          ctx.globalAlpha=alpha;
+          ctx.translate(cx,cy);
+          ctx.rotate(rot);
+          if(type===2){
+            const s=size*0.55;
+            for(let i=0;i<5;i++){
+              ctx.save(); ctx.rotate((Math.PI*2/5)*i);
+              ctx.beginPath();
+              ctx.moveTo(0,0);
+              ctx.bezierCurveTo(-s*0.5,-s*0.6,-s*0.2,-s*1.3,0,-s*1.4);
+              ctx.bezierCurveTo(s*0.2,-s*1.3,s*0.5,-s*0.6,0,0);
+              const g2=ctx.createRadialGradient(0,-s*0.7,0,0,-s*0.7,s);
+              g2.addColorStop(0,`hsla(${hue},100%,88%,1)`);
+              g2.addColorStop(1,`hsla(${hue-10},85%,72%,1)`);
+              ctx.fillStyle=g2; ctx.fill(); ctx.restore();
+            }
+            ctx.beginPath(); ctx.arc(0,0,s*0.22,0,Math.PI*2);
+            ctx.fillStyle=`hsla(${hue+25},80%,85%,0.9)`; ctx.fill();
+          } else {
+            const s=type===1?size:size*0.68;
+            ctx.beginPath();
+            ctx.moveTo(0,s*0.6);
+            ctx.bezierCurveTo(-s*0.85,s*0.2,-s*0.85,-s*0.65,0,-s*0.4);
+            ctx.bezierCurveTo(s*0.85,-s*0.65,s*0.85,s*0.2,0,s*0.6);
+            const grd=ctx.createRadialGradient(0,0,0,0,0,s);
+            grd.addColorStop(0,`hsla(${hue},95%,90%,1)`);
+            grd.addColorStop(0.5,`hsla(${hue-5},88%,80%,1)`);
+            grd.addColorStop(1,`hsla(${hue-15},80%,68%,0.7)`);
+            ctx.fillStyle=grd; ctx.fill();
+            ctx.beginPath(); ctx.moveTo(0,s*0.6); ctx.lineTo(0,-s*0.28);
+            ctx.strokeStyle=`hsla(${hue-20},65%,65%,0.35)`; ctx.lineWidth=0.6; ctx.stroke();
+          }
+          ctx.restore();
+        };
+
+        draw._sk2.forEach(p=>{
+          p.sway+=p.swaySpd;
+          p.x+=p.drift+Math.sin(p.sway)*p.swayAmt;
+          p.y+=p.spd;
+          p.rot+=p.rotSpd+Math.sin(p.sway)*0.008;
+          if(p.y>H+20){ p.y=-18; p.x=Math.random()*W; }
+          if(p.x>W+20) p.x=-20;
+          if(p.x<-20)  p.x=W+20;
+          drawPetal2(p.x,p.y,p.size,p.rot,p.type,p.hue,p.alpha);
+        });
+
+        // ambient glow ชมพูจาง
+        const amb=ctx.createRadialGradient(W*0.5,H*0.25,0,W*0.5,H*0.25,W*0.55);
+        amb.addColorStop(0,"rgba(255,180,220,0.07)");
+        amb.addColorStop(1,"rgba(255,180,220,0)");
+        ctx.fillStyle=amb; ctx.fillRect(0,0,W,H);
 
       } else {
         // Normal animal emoji float
