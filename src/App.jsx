@@ -223,7 +223,7 @@ const STATUS = (rec, s, now) => {
   }
   if (rec.leaveType) {
     const ls = rec.leaveStatus || "pending";
-    const lbl = {sick:"ลาป่วย",personal:"ลากิจ",vacation:"ลาพักร้อน"}[rec.leaveType]||"ลา";
+    const lbl = {sick:"ลาป่วย",personal:"ลากิจ",vacation:"ลาพักร้อน",holiday:"ลานักขัตฤกษ์"}[rec.leaveType]||"ลา";
     if (ls === "approved") return { l:`✓ ${lbl}`, c:"var(--purple)", bg:"var(--purpleBg)" };
     if (ls === "rejected") return { l:`✗ ${lbl}`, c:"var(--red)",    bg:"var(--redBg)" };
     return { l:`⏳ ${lbl} (รออนุมัติ)`, c:"var(--yellow)", bg:"var(--yellowBg)" };
@@ -1883,6 +1883,141 @@ function Login({employees,err,clinic,onLogin,onRetry,onBoard}){
 }
 
 // ─── Dash ─────────────────────────────────────────────────────────────────────
+// ─── HolidayCalendar — ปฏิทินลิสต์ "ใครลาวันไหน" ─────────────────────────────
+function HolidayCalendar({ records, employees, gSch }) {
+  const yr = today().slice(0,7).slice(0,4);
+  const [filterMonth, setFilterMonth] = useState(today().slice(0,7));
+  const [filterType, setFilterType]   = useState("all");
+
+  // รวม record ทุกคนที่มีการลา
+  const allLeaves = Object.entries(records)
+    .flatMap(([date, day]) =>
+      Object.entries(day)
+        .filter(([, r]) => r.leaveType)
+        .map(([empId, r]) => ({ date, empId, ...r }))
+    )
+    .filter(r => r.date.startsWith(filterMonth))
+    .filter(r => filterType === "all" || r.leaveType === filterType)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  // นับรายเดือน แยกประเภท
+  const countByType = (type) =>
+    allLeaves.filter(r => r.leaveType === type && r.leaveStatus !== "rejected").length;
+
+  const TYPE_LABEL = {
+    sick:    { l:"🤒 ลาป่วย",     col:"var(--red)",    bg:"var(--redBg)"    },
+    personal:{ l:"📝 ลากิจ",      col:"var(--purple)", bg:"var(--purpleBg)" },
+    vacation:{ l:"🌴 ลาพักร้อน",  col:"var(--acc)",    bg:"var(--accBg)"    },
+    holiday: { l:"🎌 นักขัตฤกษ์", col:"var(--orange)", bg:"var(--orangeBg)" },
+  };
+  const STATUS_STYLE = {
+    pending:  { l:"⏳ รอ",     col:"var(--yellow)", bg:"var(--yellowBg)" },
+    approved: { l:"✓ อนุมัติ", col:"var(--acc)",    bg:"var(--accBg)"    },
+    rejected: { l:"✗ ปฏิเสธ",  col:"var(--red)",    bg:"var(--redBg)"    },
+  };
+
+  // Holiday stats ของเดือนนี้
+  const holidayYear = Object.entries(records)
+    .flatMap(([date, day]) =>
+      Object.entries(day)
+        .filter(([, r]) => r.leaveType === "holiday" && r.date?.startsWith(yr))
+        .map(([empId, r]) => ({ date, empId, ...r }))
+    );
+
+  return (
+    <div>
+      {/* Summary pills */}
+      <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+        {Object.entries(TYPE_LABEL).map(([k,v])=>(
+          <span key={k} className="pill" style={{background:v.bg,color:v.col,border:`1px solid ${v.col}30`,fontSize:12,padding:"5px 12px"}}>
+            {v.l} {countByType(k)} วัน
+          </span>
+        ))}
+      </div>
+
+      {/* นักขัตฤกษ์ Summary รายคน */}
+      <div className="card" style={{padding:"14px 16px",marginBottom:12}}>
+        <div className="sec" style={{marginBottom:10}}>🎌 สรุปลานักขัตฤกษ์ปีนี้ (สูงสุด 13 วัน/คน)</div>
+        <div style={{display:"grid",gap:7}}>
+          {employees.filter(e=>e.role!=="admin").map(emp=>{
+            const used = holidayYear.filter(r=>r.empId===emp.id && r.leaveStatus!=="rejected").length;
+            const left = Math.max(0, 13 - used);
+            const pct  = Math.min(100, (used/13)*100);
+            return(
+              <div key={emp.id} style={{display:"flex",alignItems:"center",gap:10}}>
+                <span style={{fontSize:18,flexShrink:0}}>{emp.avatar||"🐾"}</span>
+                <div style={{width:80,fontSize:12,color:"var(--tx)",flexShrink:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{emp.name}</div>
+                <div style={{flex:1,height:14,background:"var(--card2)",borderRadius:7,overflow:"hidden"}}>
+                  <div style={{height:"100%",width:`${pct}%`,background:pct>=100?"var(--red)":"var(--orange)",borderRadius:7,transition:"width .4s ease"}}/>
+                </div>
+                <div style={{fontSize:11,color:pct>=100?"var(--red)":"var(--tx2)",fontWeight:600,minWidth:44,textAlign:"right"}}>{used}/13 วัน</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Filter bar */}
+      <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+        <input type="month" value={filterMonth} onChange={e=>setFilterMonth(e.target.value)} style={{width:160}}/>
+        <select value={filterType} onChange={e=>setFilterType(e.target.value)} style={{flex:1,minWidth:120}}>
+          <option value="all">📋 ทุกประเภท</option>
+          <option value="holiday">🎌 นักขัตฤกษ์</option>
+          <option value="sick">🤒 ลาป่วย</option>
+          <option value="personal">📝 ลากิจ</option>
+          <option value="vacation">🌴 ลาพักร้อน</option>
+        </select>
+      </div>
+
+      {/* รายการลิสต์เรียงวันที่ */}
+      <div className="card" style={{overflow:"hidden"}}>
+        {allLeaves.length===0
+          ? <div style={{padding:40,textAlign:"center",color:"var(--tx3)",fontSize:14}}>📅 ไม่มีการลาในเดือนนี้</div>
+          : (()=>{
+              // group by date
+              const grouped = {};
+              allLeaves.forEach(r=>{
+                if(!grouped[r.date]) grouped[r.date]=[];
+                grouped[r.date].push(r);
+              });
+              return Object.entries(grouped).map(([date, recs])=>(
+                <div key={date}>
+                  {/* Date header */}
+                  <div style={{padding:"8px 16px",background:"var(--card2)",borderBottom:"1px solid var(--br)",display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:13,fontWeight:700,color:"var(--acc)"}}>{fd(date)}</span>
+                    <span style={{fontSize:11,color:"var(--tx3)"}}>
+                      {new Date(date+"T12:00:00").toLocaleDateString("th-TH",{weekday:"long",timeZone:"Asia/Bangkok"})}
+                    </span>
+                    <span className="pill" style={{background:"var(--accBg)",color:"var(--acc)",fontSize:10,marginLeft:"auto"}}>{recs.length} คน</span>
+                  </div>
+                  {/* รายชื่อ */}
+                  {recs.map((r,i)=>{
+                    const emp = employees.find(e=>e.id===r.empId);
+                    const tl  = TYPE_LABEL[r.leaveType]||{l:r.leaveType,col:"var(--tx2)",bg:"var(--card2)"};
+                    const sl  = STATUS_STYLE[r.leaveStatus||"pending"];
+                    return(
+                      <div key={i} style={{padding:"10px 16px",borderBottom:"1px solid var(--br)",display:"flex",alignItems:"center",gap:12}}>
+                        <span style={{fontSize:20,flexShrink:0}}>{emp?.avatar||"🐾"}</span>
+                        <div style={{flex:1}}>
+                          <div style={{fontWeight:600,fontSize:13,color:"var(--tx)"}}>{emp?.name||r.empId}</div>
+                          {r.leaveReason&&<div style={{fontSize:11,color:"var(--tx2)",marginTop:2}}>เหตุผล: {r.leaveReason}</div>}
+                        </div>
+                        <div style={{display:"flex",gap:5,flexShrink:0,flexWrap:"wrap",justifyContent:"flex-end"}}>
+                          <span className="pill" style={{background:tl.bg,color:tl.col,fontSize:10}}>{tl.l}</span>
+                          <span className="pill" style={{background:sl.bg,color:sl.col,fontSize:10}}>{sl.l}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ));
+            })()
+        }
+      </div>
+    </div>
+  );
+}
+
 function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onReloadEmp,onLogout,showToast}){
   const[tab,setTab]=useState("checkin");
   const[gps,setGps]=useState("idle"); // idle|checking|ok|err|far
@@ -1991,7 +2126,10 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
   const myRecs = Object.entries(records).flatMap(([d,r])=>r[user.id]?[{date:d,...r[user.id]}]:[]).sort((a,b)=>b.date.localeCompare(a.date));
   const mo=today().slice(0,7), yr=today().slice(0,4);
   const moRecs = myRecs.filter(r=>r.date.startsWith(mo));
-  const leaveUsed  = myRecs.filter(r=>r.leaveType&&r.date.startsWith(yr)).length;
+  const leaveUsed     = myRecs.filter(r=>r.leaveType&&r.leaveType!=="holiday"&&r.date.startsWith(yr)).length;
+  const holidayUsed   = myRecs.filter(r=>r.leaveType==="holiday"&&r.date.startsWith(yr)).length;
+  const HOLIDAY_MAX   = 13;
+  const holidayLeft   = Math.max(0, HOLIDAY_MAX - holidayUsed);
   const s2 = s || { maxLeaveDays: me?.maxLeaveDays ?? gSch?.maxLeaveDays ?? 10 };
   const leaveLeft  = Math.max(0, s2.maxLeaveDays - leaveUsed);
   const moHrs = moRecs.reduce((x,r)=>x+(dm(r.checkIn,r.checkOut)||0),0); // gross
@@ -2118,7 +2256,8 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
   };
   const doLeave = async () => {
     if(!lf.reason.trim()){ showToast(false,"กรุณาระบุเหตุผล"); return; }
-    if(leaveLeft<=0){ showToast(false,"วันลาไม่เพียงพอ"); return; }
+    if(lf.type==="holiday" && holidayLeft<=0){ showToast(false,`ใช้วันลานักขัตฤกษ์ครบ ${HOLIDAY_MAX} วันแล้ว`); return; }
+    if(lf.type!=="holiday" && leaveLeft<=0){ showToast(false,"วันลาไม่เพียงพอ"); return; }
     setBusy(true);
     const r=await call("submitLeave",{empId:user.id,startDate:lf.start,endDate:lf.end,leaveType:lf.type,reason:lf.reason});
     r.success?(await onReloadRec(),showToast(true,`ส่งคำขอลาสำเร็จ (${r.days} วัน) — รออนุมัติ`)):showToast(false,r.message);
@@ -2135,7 +2274,7 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
     setBusy(false);
   };
   const exportCSV=()=>{
-    const rows=[["วันที่","เข้างาน","ออกงาน","เริ่มพัก","กลับจากพัก","พัก(น.)","สถานะพัก","ชม.ปกติ(ตาราง)","ชม.รวม(รวมพัก)","OT(น.)","OT(ชม:น.)","สถานะงาน"]];
+    const rows=[["วันที่","เข้างาน","ออกงาน","เริ่มพัก","กลับจากพัก","พัก(น.)","สถานะพัก","ชม.ปกติ(ตาราง)","ชม.รวม(รวมพัก)","OT(น.)","OT(ชม:น.)","สถานะงาน","ประเภทลา"]];
     myRecs.forEach(r=>{ const s3=getScheduleForDate(r.date,me,gSch);const st3=STATUS(r,s3);const bm=dm(r.breakStart,r.breakEnd);const total=dm(r.checkIn,r.checkOut);const net=total!=null?total-(bm||0):null;const bs=breakStatus(bm,s3?.breakLimitMins); const otRes3=calcOT(r.checkIn,r.checkOut,r.breakStart,r.breakEnd,s3); rows.push([r.date,ft(r.checkIn),ft(r.checkOut),ft(r.breakStart),ft(r.breakEnd),bm!=null?bm:"",bs?bs.l:"",otRes3?hm(otRes3.normal):"",otRes3?hm(otRes3.gross):"",otRes3?.ot||"",otRes3?.isOT?hm(otRes3.ot):"",st3.l]); });
     const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["\uFEFF"+rows.map(x=>x.join(",")).join("\n")],{type:"text/csv;charset=utf-8;"}));a.download=`att_${user.id}_${today()}.csv`;a.click();
   };
@@ -2226,6 +2365,7 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
         <Stat label="มาสาย" value={moRecs.filter(r=>{const s3=getScheduleForDate(r.date,me,gSch);return STATUS(r,s3).l.startsWith("มาสาย");}).length} color="var(--yellow)"/>
         <Stat label="ลาแล้ว" value={leaveUsed} color="var(--purple)"/>
         <Stat label="วันลาคงเหลือ" value={leaveLeft} color="var(--acc2)"/>
+        <Stat label="🎌นักขัตฤกษ์คงเหลือ" value={`${holidayLeft}/${HOLIDAY_MAX}`} color="var(--orange)"/>
       </div>
       {/* Hours summary row */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:7,marginBottom:12}}>
@@ -2245,7 +2385,7 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
 
       {/* Tabs */}
       <div style={{display:"flex",gap:5,marginBottom:12}}>
-        {[["checkin","🕐","เช็คอิน"],["history","📋","ประวัติ"],["leave","🌿","ใบลา"],["profile","👤","โปรไฟล์"]].map(([k,ic,lb])=>(
+        {[["checkin","🕐","เช็คอิน"],["history","📋","ประวัติ"],["leave","🌿","ใบลา"],["calendar","📅","ปฏิทิน"],["profile","👤","โปรไฟล์"]].map(([k,ic,lb])=>(
           <button key={k} onClick={()=>setTab(k)} style={{flex:1,padding:"9px 4px",background:tab===k?"var(--accBg)":"var(--card2)",color:tab===k?"var(--acc)":"var(--tx2)",border:`1px solid ${tab===k?"var(--acc)":"var(--br)"}`,borderRadius:10,fontSize:11,fontWeight:tab===k?700:400}}>
             <span style={{display:"block",fontSize:16,marginBottom:2}}>{ic}</span>{lb}
           </button>
@@ -2361,7 +2501,7 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
           {gps==="idle"&&<div style={{textAlign:"center",fontSize:12,color:"var(--tx3)",marginTop:10}}>กดตรวจสอบพิกัดก่อนเช็คอิน/เอาท์</div>}
 
           <button onClick={()=>setTab("leave")} style={{width:"100%",padding:11,background:"var(--purpleBg)",color:"var(--purple)",border:"1px solid var(--purple)40",fontSize:13,fontWeight:600,borderRadius:12,marginTop:6}}>
-            🌿 ส่งคำขอลา — คงเหลือ {leaveLeft} วัน
+            🌿 ส่งคำขอลา — เหลือ {leaveLeft} วัน · 🎌 นักขัต {holidayLeft} วัน
           </button>
 
           {/* 👥 ใครพักอยู่บ้าง — แสดงให้ทุกคนเห็น */}
@@ -2446,6 +2586,7 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
                   <option value="sick">🤒 ลาป่วย</option>
                   <option value="personal">📝 ลากิจ</option>
                   <option value="vacation">🌴 ลาพักร้อน</option>
+                  <option value="holiday">🎌 ลานักขัตฤกษ์</option>
                 </select>
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
@@ -2456,7 +2597,10 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
             </div>
             <button onClick={doLeave} disabled={busy} style={{marginTop:14,width:"100%",padding:12,background:"linear-gradient(135deg,#5b21b6,#7c3aed)",color:"#fff",fontWeight:700,borderRadius:12}}>{busy?"กำลังส่ง...":"ส่งคำขอลา →"}</button>
           </div>
-          <div style={{fontSize:12,color:"var(--tx2)",marginBottom:10,paddingLeft:4}}>ใช้ลา {leaveUsed}/{s2.maxLeaveDays} วัน ปีนี้</div>
+          <div style={{fontSize:12,color:"var(--tx2)",marginBottom:10,paddingLeft:4,display:"flex",gap:14,flexWrap:"wrap"}}>
+            <span>📋 ใช้ลา {leaveUsed}/{s2.maxLeaveDays} วัน ปีนี้</span>
+            <span>🎌 นักขัตฤกษ์ {holidayUsed}/{HOLIDAY_MAX} วัน ปีนี้</span>
+          </div>
           <div className="card" style={{overflow:"hidden"}}>
             {myRecs.filter(r=>r.leaveType).length===0?<div style={{padding:30,textAlign:"center",color:"var(--tx3)",fontSize:13}}>🌿 ยังไม่มีประวัติการลา</div>
             :<table>
@@ -2464,7 +2608,7 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
               <tbody>{myRecs.filter(r=>r.leaveType).map(r=>{ const ls=r.leaveStatus||"pending"; return(
                 <tr key={r.date}>
                   <td style={{fontSize:11}}>{fd(r.date)}</td>
-                  <td><span className="pill" style={{background:"var(--purpleBg)",color:"var(--purple)",fontSize:9}}>{{sick:"🤒 ลาป่วย",personal:"📝 ลากิจ",vacation:"🌴 พักร้อน"}[r.leaveType]||r.leaveType}</span></td>
+                  <td><span className="pill" style={{background:"var(--purpleBg)",color:"var(--purple)",fontSize:9}}>{{sick:"🤒 ลาป่วย",personal:"📝 ลากิจ",vacation:"🌴 พักร้อน",holiday:"🎌 นักขัตฤกษ์"}[r.leaveType]||r.leaveType}</span></td>
                   <td>
                     <span className="pill" style={{background:{pending:"var(--yellowBg)",approved:"var(--accBg)",rejected:"var(--redBg)"}[ls],color:{pending:"var(--yellow)",approved:"var(--acc)",rejected:"var(--red)"}[ls],fontSize:9}}>{ls==="pending"?"⏳รออนุมัติ":ls==="approved"?"✓อนุมัติ":"✗ปฏิเสธ"}</span>
 
@@ -2474,6 +2618,13 @@ function Dash({user,empList,records,location,gSch,clinic,setRec,onReloadRec,onRe
               );})}</tbody>
             </table>}
           </div>
+        </div>
+      )}
+
+      {/* HOLIDAY CALENDAR TAB — ใครลาวันไหน */}
+      {tab==="calendar"&&(
+        <div className="fade">
+          <HolidayCalendar records={records} employees={empList} gSch={gSch}/>
         </div>
       )}
 
@@ -3243,7 +3394,7 @@ function AdminPanel({user,employees,records,shifts,location,gSch,clinic,onReload
                         <div><div style={{fontSize:13,fontWeight:700,color:"var(--tx)"}}>{lv.emp?.name||lv.empId}</div><div style={{fontSize:11,color:"var(--tx2)"}}>{lv.emp?.position||""}</div></div>
                       </div>
                       <div style={{fontSize:12,color:"var(--tx2)"}}>
-                        <span className="pill" style={{background:"var(--purpleBg)",color:"var(--purple)",fontSize:10,marginRight:6}}>{{sick:"🤒 ลาป่วย",personal:"📝 ลากิจ",vacation:"🌴 พักร้อน"}[lv.leaveType]||lv.leaveType}</span>
+                        <span className="pill" style={{background:"var(--purpleBg)",color:"var(--purple)",fontSize:10,marginRight:6}}>{{sick:"🤒 ลาป่วย",personal:"📝 ลากิจ",vacation:"🌴 พักร้อน",holiday:"🎌 นักขัตฤกษ์"}[lv.leaveType]||lv.leaveType}</span>
                         📅 {fd(lv.date)}
                       </div>
                       {lv.leaveReason&&<div style={{fontSize:11,color:"var(--tx3)",marginTop:3}}>เหตุผล: {lv.leaveReason}</div>}
@@ -3269,7 +3420,7 @@ function AdminPanel({user,employees,records,shifts,location,gSch,clinic,onReload
                     return(<tr key={i}>
                       <td style={{fontSize:11,color:"var(--tx2)"}}>{fd(r.date)}</td>
                       <td><div style={{fontSize:13,fontWeight:500,color:"var(--tx)"}}>{emp?.name||r.empId}</div></td>
-                      <td><span className="pill" style={{background:"var(--purpleBg)",color:"var(--purple)",fontSize:9}}>{{sick:"🤒ลาป่วย",personal:"📝ลากิจ",vacation:"🌴พักร้อน"}[r.leaveType]||r.leaveType}</span></td>
+                      <td><span className="pill" style={{background:"var(--purpleBg)",color:"var(--purple)",fontSize:9}}>{{sick:"🤒ลาป่วย",personal:"📝ลากิจ",vacation:"🌴พักร้อน",holiday:"🎌นักขัต"}[r.leaveType]||r.leaveType}</span></td>
                       <td style={{fontSize:12,color:"var(--tx2)"}}>{r.leaveReason||"—"}</td>
                       <td>
                         <span className="pill" style={{background:{pending:"var(--yellowBg)",approved:"var(--accBg)",rejected:"var(--redBg)"}[ls],color:{pending:"var(--yellow)",approved:"var(--acc)",rejected:"var(--red)"}[ls],fontSize:9}}>{ls==="pending"?"⏳รอ":ls==="approved"?"✓อนุมัติ":"✗ปฏิเสธ"}</span>
