@@ -3,16 +3,19 @@ import { useState, useEffect, useRef, useCallback } from "react";
 // ─── Supabase Connection ──────────────────────────────────────────────────────
 const SB_URL = "https://hcwofnjtqtalvdbuklov.supabase.co";
 const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhjd29mbmp0cXRhbHZkYnVrbG92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY1MDQ2MjUsImV4cCI6MjA5MjA4MDYyNX0.T2zIU7nV8h0aPXZwo3UzoUaxAYf26HkIgnpPs9Qq51s";
-const sbHeaders = {"apikey":SB_KEY,"Authorization":`Bearer ${SB_KEY}`,"Content-Type":"application/json"};
-
 const sb = async (path, method="GET", body=null, extra={}) => {
-  const headers = {...sbHeaders, ...extra};
-  const r = await fetch(`${SB_URL}/rest/v1/${path}`, {
-    method, headers, body: body ? JSON.stringify(body) : null,
-  });
-  if (!r.ok) { const e = await r.text(); throw new Error(e); }
-  const text = await r.text();
-  return text ? JSON.parse(text) : null;
+  const headers = {
+    "apikey": SB_KEY,
+    "Authorization": `Bearer ${SB_KEY}`,
+    ...(body ? {"Content-Type":"application/json"} : {}),
+    ...extra,
+  };
+  const opts = { method, headers };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(`${SB_URL}/rest/v1/${path}`, opts);
+  if (!r.ok) { const e = await r.text().catch(()=>""); throw new Error(`${r.status}: ${e}`); }
+  const text = await r.text().catch(()=>"");
+  return text ? JSON.parse(text) : [];
 };
 
 // ─── call() — drop-in replacement ────────────────────────────────────────────
