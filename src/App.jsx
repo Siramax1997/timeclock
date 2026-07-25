@@ -1,12 +1,105 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
-const API = "https://script.google.com/macros/s/AKfycbyk5pFcfXtuZm0wUFqswrQxzvgOOkMb9jTViCbktmH7KzIUGr6zhE6pzKMUsS2vUK7x/exec";
+// ─── Supabase Connection ──────────────────────────────────────────────────────
+const SB_URL = "https://hcwofnjtqtalvdbuklov.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhjd29mbmp0cXRhbHZkYnVrbG92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY1MDQ2MjUsImV4cCI6MjA5MjA4MDYyNX0.T2zIU7nV8h0aPXZwo3UzoUaxAYf26HkIgnpPs9Qq51s";
+
+const sb = async (path, method="GET", body=null, extra={}) => {
+  const headers = {"apikey":SB_KEY,"Authorization":`Bearer ${SB_KEY}`,...(body?{"Content-Type":"application/json"}:{}),...extra};
+  const r = await fetch(`${SB_URL}/rest/v1/${path}`,{method,headers,body:body?JSON.stringify(body):null});
+  if(!r.ok){const e=await r.text().catch(()=>"");throw new Error(`${r.status}: ${e}`);}
+  const t=await r.text().catch(()=>"");return t?JSON.parse(t):[];
+};
+
+const mapEmp=r=>({id:r.id,name:r.name,role:r.role,email:r.email||"",phone:r.phone||"",position:r.position||"",department:r.department||"",salary:r.salary||"",startDate:r.start_date||"",workStart:r.work_start||"",workEnd:r.work_end||"",graceMins:r.grace_mins,workDays:r.work_days||"",maxLeaveDays:r.max_leave_days,note:r.note||"",avatar:r.avatar||"",weekSchedule:r.week_schedule,birthday:r.birthday||""});
+
 const call = async (action, params = {}) => {
   try {
-    const qs = new URLSearchParams({ action, ...params }).toString();
-    const r = await fetch(`${API}?${qs}`, { redirect: "follow" });
-    return JSON.parse(await r.text());
-  } catch (e) { return { success: false, message: String(e) }; }
+    if(action==="login"){
+      const rows=await sb(`employees?id=eq.${encodeURIComponent(params.id.toUpperCase())}&select=*`);
+      if(rows.length&&String(rows[0].pin)===String(params.pin)){const{pin,...s}=rows[0];return{success:true,user:mapEmp(s)};}
+      return{success:false,message:"รหัสพนักงานหรือ PIN ไม่ถูกต้อง"};
+    }else if(action==="getEmployees"){
+      const rows=await sb("employees?select=*&order=id");
+      return{success:true,data:rows.map(r=>{const{pin,...s}=r;return mapEmp(s);})};
+    }else if(action==="getConfig"){
+      const rows=await sb("config?select=*");const cfg={};rows.forEach(r=>{cfg[r.key]=r.value;});
+      return{success:true,data:cfg};
+    }else if(action==="saveConfig"){
+      const val=typeof params.data==="string"?JSON.parse(params.data):params.data;
+      await sb("config?on_conflict=key","POST",[{key:params.configKey,value:val}],{"Prefer":"resolution=merge-duplicates,return=minimal"});
+      return{success:true};
+    }else if(action==="getRecords"){
+      const rows=await sb("records?select=*&order=date.desc");const records={};
+      rows.forEach(r=>{if(!records[r.date])records[r.date]={};
+        records[r.date][r.emp_id]={checkIn:r.check_in,checkOut:r.check_out,checkInLat:r.lat_in,checkInLng:r.lng_in,checkOutLat:r.lat_out,checkOutLng:r.lng_out,leaveType:r.leave_type,leaveReason:r.leave_reason,leaveStatus:r.leave_status,approvedBy:r.approved_by,breakStart:r.break_start,breakEnd:r.break_end};});
+      return{success:true,data:records};
+    }else if(action==="checkIn"){
+      const{date,empId,time,lat,lng}=params;
+      const ex=await sb(`records?date=eq.${date}&emp_id=eq.${encodeURIComponent(empId)}&select=check_in`);
+      if(ex.length&&ex[0].check_in)return{success:true,alreadyCheckedIn:true,checkIn:ex[0].check_in};
+      await sb("records?on_conflict=date,emp_id","POST",[{date,emp_id:empId,check_in:time,lat_in:+lat||0,lng_in:+lng||0}],{"Prefer":"resolution=merge-duplicates,return=minimal"});
+      return{success:true};
+    }else if(action==="checkOut"){
+      const{date,empId,time,lat,lng}=params;
+      const ex=await sb(`records?date=eq.${date}&emp_id=eq.${encodeURIComponent(empId)}&select=check_in,check_out`);
+      if(!ex.length||!ex[0].check_in)return{success:false,message:"ไม่พบข้อมูลเช็คอิน — กรุณาเช็คอินก่อน"};
+      if(ex[0].check_out)return{success:true,alreadyCheckedOut:true,checkOut:ex[0].check_out};
+      await sb(`records?date=eq.${date}&emp_id=eq.${encodeURIComponent(empId)}`,"PATCH",{check_out:time,lat_out:+lat||0,lng_out:+lng||0});
+      return{success:true};
+    }else if(action==="breakStart"){
+      const{date,empId,time}=params;
+      const ex=await sb(`records?date=eq.${date}&emp_id=eq.${encodeURIComponent(empId)}&select=break_start`);
+      if(!ex.length)return{success:false,message:"ไม่พบข้อมูลเช็คอิน"};
+      if(ex[0].break_start)return{success:true,alreadyStarted:true,breakStart:ex[0].break_start};
+      await sb(`records?date=eq.${date}&emp_id=eq.${encodeURIComponent(empId)}`,"PATCH",{break_start:time});
+      return{success:true};
+    }else if(action==="breakEnd"){
+      const{date,empId,time}=params;
+      const ex=await sb(`records?date=eq.${date}&emp_id=eq.${encodeURIComponent(empId)}&select=break_start,break_end`);
+      if(!ex.length)return{success:false,message:"ไม่พบข้อมูล"};
+      if(ex[0].break_end)return{success:true,alreadyEnded:true,breakEnd:ex[0].break_end};
+      if(!ex[0].break_start)return{success:false,message:"ยังไม่ได้เริ่มพัก"};
+      await sb(`records?date=eq.${date}&emp_id=eq.${encodeURIComponent(empId)}`,"PATCH",{break_end:time});
+      return{success:true};
+    }else if(action==="submitLeave"){
+      const{empId,startDate,endDate,leaveType,reason}=params;const dates=[];
+      let cur=new Date(startDate+"T12:00:00");const end=new Date(endDate+"T12:00:00");
+      while(cur<=end){dates.push(cur.toLocaleDateString("en-CA"));cur.setDate(cur.getDate()+1);}
+      await sb("records?on_conflict=date,emp_id","POST",dates.map(d=>({date:d,emp_id:empId,leave_type:leaveType,leave_reason:reason,leave_status:"pending"})),{"Prefer":"resolution=merge-duplicates,return=minimal"});
+      return{success:true,days:dates.length};
+    }else if(action==="approveLeave"||action==="rejectLeave"){
+      const status=action==="approveLeave"?"approved":"rejected";
+      await sb(`records?date=eq.${params.date}&emp_id=eq.${encodeURIComponent(params.empId)}`,"PATCH",{leave_status:status,approved_by:params.approvedBy});
+      return{success:true,status};
+    }else if(action==="cancelLeave"){
+      await sb(`records?date=eq.${params.date}&emp_id=eq.${encodeURIComponent(params.empId)}`,"PATCH",{leave_type:null,leave_reason:null,leave_status:null,approved_by:null});
+      return{success:true};
+    }else if(action==="addEmployee"){
+      const p=params;await sb("employees","POST",[{id:p.id,name:p.name,pin:p.pin,role:p.role||"employee",email:p.email||"",phone:p.phone||"",position:p.position||"",department:p.department||"",salary:p.salary||"",start_date:p.startDate||"",work_start:p.workStart||"",work_end:p.workEnd||"",grace_mins:p.graceMins!=null&&p.graceMins!==""?Number(p.graceMins):null,work_days:p.workDays||"",max_leave_days:p.maxLeaveDays!=null&&p.maxLeaveDays!==""?Number(p.maxLeaveDays):null,note:p.note||"",avatar:p.avatar||"",week_schedule:p.weekSchedule?(typeof p.weekSchedule==="string"?JSON.parse(p.weekSchedule):p.weekSchedule):null}]);
+      return{success:true};
+    }else if(action==="updateEmployee"){
+      const{id,...fields}=params;const mapped={};
+      const MAP={name:"name",pin:"pin",role:"role",email:"email",phone:"phone",position:"position",department:"department",salary:"salary",startDate:"start_date",workStart:"work_start",workEnd:"work_end",graceMins:"grace_mins",workDays:"work_days",maxLeaveDays:"max_leave_days",note:"note",avatar:"avatar",weekSchedule:"week_schedule"};
+      Object.entries(fields).forEach(([k,v])=>{if(v!==undefined&&v!=="undefined"&&MAP[k]){if(k==="weekSchedule"&&typeof v==="string"){try{mapped[MAP[k]]=JSON.parse(v);}catch{mapped[MAP[k]]=v;}}else if(k==="graceMins"||k==="maxLeaveDays")mapped[MAP[k]]=v!==""?Number(v):null;else mapped[MAP[k]]=v;}});
+      await sb(`employees?id=eq.${encodeURIComponent(id)}`,"PATCH",mapped);
+      return{success:true};
+    }else if(action==="deleteEmployee"){
+      await sb(`employees?id=eq.${encodeURIComponent(params.id)}`,"DELETE");return{success:true};
+    }else if(action==="deleteRecord"){
+      await sb(`records?date=eq.${params.date}&emp_id=eq.${encodeURIComponent(params.empId)}`,"DELETE");return{success:true,deleted:1};
+    }else if(action==="getShifts"){
+      const rows=await sb("shifts?select=*&order=date");
+      return{success:true,data:rows.map(r=>({week:r.week,empId:r.emp_id,date:r.date,type:r.type,startTime:r.start_time,endTime:r.end_time,note:r.note}))};
+    }else if(action==="saveShift"){
+      const{empId,date,type,startTime,endTime,note}=params;
+      if(type==="default"){await sb(`shifts?date=eq.${date}&emp_id=eq.${encodeURIComponent(empId)}`,"DELETE");}
+      else{const d=new Date(date+"T12:00:00");const jan4=new Date(d.getFullYear(),0,4);const wk=Math.ceil(((d-jan4)/86400000+jan4.getDay()+1)/7);const week=`${d.getFullYear()}-W${String(wk).padStart(2,"0")}`;
+        await sb("shifts?on_conflict=date,emp_id","POST",[{week,emp_id:empId,date,type,start_time:startTime||"",end_time:endTime||"",note:note||""}],{"Prefer":"resolution=merge-duplicates,return=minimal"});}
+      return{success:true};
+    }else if(action==="deduplicateRecords"){return{success:true,deleted:0};}
+    else{return{success:false,message:"unknown action: "+action};}
+  } catch(e){return{success:false,message:String(e)};}
 };
 
 // ─── Pending Queue — กันเช็คอินหาย ถ้ามือถือ kill app กลางอากาศ ──────────────
