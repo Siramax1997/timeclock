@@ -937,7 +937,7 @@ function AnimBG({ themeId }) {
 }
 
 // ─── PhotoBG — พื้นหลังภาพถ่ายจริง เบลอ+มืดลง ให้อ่านง่าย ───────────────────────
-function PhotoBG({ src, blur=2, brightness=0.55, overlay="rgba(8,8,10,.3)", overlayGrad=null }) {
+function PhotoBG({ src, blur=2, brightness=0.55, overlay="rgba(8,8,10,.3)", overlayGrad=null, position="center" }) {
   const grad = overlayGrad || `linear-gradient(180deg, ${overlay.replace(")",",")} 0%), ${overlay.replace(")",",")} 40%), ${overlay.replace(")",",")} 100%))`.replace(/\),\)/g,")");
   return (
     <div style={{position:"fixed",inset:0,zIndex:0,pointerEvents:"none",overflow:"hidden"}}>
@@ -945,7 +945,7 @@ function PhotoBG({ src, blur=2, brightness=0.55, overlay="rgba(8,8,10,.3)", over
         position:"absolute",inset:"-20px",
         backgroundImage:`url(${src})`,
         backgroundSize:"cover",
-        backgroundPosition:"center",
+        backgroundPosition:position,
         filter:`blur(${blur}px) brightness(${brightness}) saturate(1.05)`,
         transform:"scale(1.05)",
       }}/>
@@ -1236,7 +1236,7 @@ export default function App() {
 
   if(loading) return(
     <div style={{...ws,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100vh",gap:14}}>
-      <style>{CSS}</style>{th.photoBg ? (th.id==="goldendog" ? <PhotoBG src={DOG_PHOTO_BG} blur={1.5} brightness={0.72} overlayGrad="linear-gradient(180deg,rgba(245,235,215,.18) 0%,rgba(245,235,215,.08) 50%,rgba(30,20,10,.38) 100%)"/> : th.id==="signnight" ? <PhotoBG src={SIGN_PHOTO_BG} blur={3} brightness={0.62} overlayGrad="linear-gradient(180deg,rgba(10,8,6,.6) 0%,rgba(10,8,6,.3) 45%,rgba(10,8,6,.65) 100%)"/> : th.id==="cafecat" ? <PhotoBG src={CAFE_PHOTO_BG} blur={1.5} brightness={0.78} overlayGrad="linear-gradient(180deg,rgba(250,240,225,.15) 0%,rgba(250,240,225,.06) 50%,rgba(40,25,10,.42) 100%)"/> : th.id==="puppy" ? <PhotoBG src={PUPPY_PHOTO_BG} blur={1} brightness={0.88} overlayGrad="linear-gradient(180deg,rgba(245,240,234,.1) 0%,rgba(245,240,234,.05) 50%,rgba(40,30,15,.3) 100%)"/> : <PhotoBG src={CLINIC_PHOTO_BG}/>) : <AnimBG themeId={themeId}/>}
+      <style>{CSS}</style>{th.photoBg ? (th.id==="goldendog" ? <PhotoBG src={DOG_PHOTO_BG} blur={1.5} brightness={0.72} overlayGrad="linear-gradient(180deg,rgba(245,235,215,.18) 0%,rgba(245,235,215,.08) 50%,rgba(30,20,10,.38) 100%)"/> : th.id==="signnight" ? <PhotoBG src={SIGN_PHOTO_BG} blur={3} brightness={0.62} overlayGrad="linear-gradient(180deg,rgba(10,8,6,.6) 0%,rgba(10,8,6,.3) 45%,rgba(10,8,6,.65) 100%)"/> : th.id==="cafecat" ? <PhotoBG src={CAFE_PHOTO_BG} blur={1.5} brightness={0.78} overlayGrad="linear-gradient(180deg,rgba(250,240,225,.15) 0%,rgba(250,240,225,.06) 50%,rgba(40,25,10,.42) 100%)"/> : th.id==="puppy" ? <PhotoBG src={PUPPY_PHOTO_BG} blur={1} brightness={0.88} position="center 75%" overlayGrad="linear-gradient(180deg,rgba(245,240,234,.1) 0%,rgba(245,240,234,.05) 50%,rgba(40,30,15,.3) 100%)"/> : <PhotoBG src={CLINIC_PHOTO_BG}/>) : <AnimBG themeId={themeId}/>}
       <div style={{width:46,height:46,border:"3px solid var(--br2)",borderTopColor:"var(--acc)",borderRadius:"50%"}} className="spin"/>
       <div style={{color:"var(--tx2)",fontSize:12,letterSpacing:3,textTransform:"uppercase"}}>กำลังโหลด...</div>
     </div>
@@ -1244,7 +1244,7 @@ export default function App() {
 
   return(
     <div style={ws}>
-      <style>{CSS}</style>{th.photoBg ? (th.id==="goldendog" ? <PhotoBG src={DOG_PHOTO_BG} blur={1.5} brightness={0.72} overlayGrad="linear-gradient(180deg,rgba(245,235,215,.18) 0%,rgba(245,235,215,.08) 50%,rgba(30,20,10,.38) 100%)"/> : th.id==="signnight" ? <PhotoBG src={SIGN_PHOTO_BG} blur={3} brightness={0.62} overlayGrad="linear-gradient(180deg,rgba(10,8,6,.6) 0%,rgba(10,8,6,.3) 45%,rgba(10,8,6,.65) 100%)"/> : th.id==="cafecat" ? <PhotoBG src={CAFE_PHOTO_BG} blur={1.5} brightness={0.78} overlayGrad="linear-gradient(180deg,rgba(250,240,225,.15) 0%,rgba(250,240,225,.06) 50%,rgba(40,25,10,.42) 100%)"/> : th.id==="puppy" ? <PhotoBG src={PUPPY_PHOTO_BG} blur={1} brightness={0.88} overlayGrad="linear-gradient(180deg,rgba(245,240,234,.1) 0%,rgba(245,240,234,.05) 50%,rgba(40,30,15,.3) 100%)"/> : <PhotoBG src={CLINIC_PHOTO_BG}/>) : <AnimBG themeId={themeId}/>}
+      <style>{CSS}</style>{th.photoBg ? (th.id==="goldendog" ? <PhotoBG src={DOG_PHOTO_BG} blur={1.5} brightness={0.72} overlayGrad="linear-gradient(180deg,rgba(245,235,215,.18) 0%,rgba(245,235,215,.08) 50%,rgba(30,20,10,.38) 100%)"/> : th.id==="signnight" ? <PhotoBG src={SIGN_PHOTO_BG} blur={3} brightness={0.62} overlayGrad="linear-gradient(180deg,rgba(10,8,6,.6) 0%,rgba(10,8,6,.3) 45%,rgba(10,8,6,.65) 100%)"/> : th.id==="cafecat" ? <PhotoBG src={CAFE_PHOTO_BG} blur={1.5} brightness={0.78} overlayGrad="linear-gradient(180deg,rgba(250,240,225,.15) 0%,rgba(250,240,225,.06) 50%,rgba(40,25,10,.42) 100%)"/> : th.id==="puppy" ? <PhotoBG src={PUPPY_PHOTO_BG} blur={1} brightness={0.88} position="center 75%" overlayGrad="linear-gradient(180deg,rgba(245,240,234,.1) 0%,rgba(245,240,234,.05) 50%,rgba(40,30,15,.3) 100%)"/> : <PhotoBG src={CLINIC_PHOTO_BG}/>) : <AnimBG themeId={themeId}/>}
       <Toast msg={toast}/>
       <ThemeSwitcher current={themeId} onChange={changeTheme}/>
       {showBday && bdayUser && (
